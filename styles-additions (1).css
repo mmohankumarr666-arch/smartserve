@@ -1,0 +1,134 @@
+/* ── Add these styles to your existing styles.css ── */
+
+/* Auth tab switcher */
+.auth-tabs {
+  display: flex;
+  gap: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid var(--border, #e2e8f0);
+  margin-bottom: 1.25rem;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 0.55rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted, #64748b);
+  transition: background 0.15s, color 0.15s;
+}
+
+.auth-tab.active {
+  background: var(--accent, #0f172a);
+  color: #fff;
+}
+
+/* Hidden utility used by auth forms */
+.hidden {
+  display: none !important;
+}
+
+/* Login message error state */
+.login-message.error {
+  color: #dc2626;
+}
+
+/* ── Invoice history ── */
+.history-invoice {
+  border: 1.5px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 0.6rem;
+}
+
+.history-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  text-align: left;
+  gap: 1rem;
+}
+
+.history-summary:hover {
+  background: var(--surface-hover, #f8fafc);
+}
+
+.history-summary-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.history-summary-left strong {
+  font-size: 0.95rem;
+}
+
+.history-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+
+.history-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.inv-chevron {
+  font-size: 1rem;
+  color: var(--text-muted, #94a3b8);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.history-invoice.expanded .inv-chevron {
+  transform: rotate(180deg);
+}
+
+/* Breakdown panel — hidden by default, shown when expanded */
+.inv-breakdown {
+  display: none;
+  padding: 0 1rem 0.85rem 1rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+  padding-top: 0.75rem;
+}
+
+.history-invoice.expanded .inv-breakdown {
+  display: block;
+}
+
+.inv-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  padding: 0.2rem 0;
+}
+
+.inv-line.muted {
+  color: var(--text-muted, #64748b);
+  font-size: 0.82rem;
+}
+
+.inv-line.grand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding-top: 0.35rem;
+  margin-top: 0.1rem;
+  border-top: 1.5px solid var(--border, #e2e8f0);
+}
+
+.inv-sep {
+  border-top: 1px dashed var(--border, #e2e8f0);
+  margin: 0.5rem 0;
+}
+
