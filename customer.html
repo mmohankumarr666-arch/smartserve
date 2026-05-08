@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SmartServe Menu</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="customer-page">
+    <main class="customer-shell">
+      <header class="customer-header">
+        <div>
+          <p class="eyebrow">SmartServe menu</p>
+          <h1 id="customer-table-title">Table 1</h1>
+        </div>
+        <div class="live-indicator">
+          <span></span>
+          <strong id="sync-status">Loading</strong>
+        </div>
+      </header>
+
+      <nav class="category-tabs" aria-label="Menu categories">
+        <button class="category-tab active" data-category="popular">Popular</button>
+        <button class="category-tab" data-category="mains">Mains</button>
+        <button class="category-tab" data-category="drinks">Drinks</button>
+        <button class="category-tab" data-category="dessert">Dessert</button>
+      </nav>
+
+      <section id="menu-grid" class="menu-grid customer-menu-grid" aria-label="Restaurant menu"></section>
+
+      <aside class="cart-panel customer-cart" aria-labelledby="cart-title">
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Same-table bill</p>
+            <h2 id="cart-title">Current round</h2>
+          </div>
+          <strong id="cart-total">₹0</strong>
+        </div>
+        <div id="cart-lines" class="cart-lines empty">Add items to begin.</div>
+        <div class="customer-actions">
+          <button id="place-order-btn" class="primary-action" disabled>Place Order</button>
+          <button id="request-bill-btn" class="secondary-action">Request Bill</button>
+        </div>
+      </aside>
+    </main>
+
+    <script src="firebase-config.js"></script>
+    <script src="customer.js"></script>
+  </body>
+</html>
