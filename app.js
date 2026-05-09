@@ -86,6 +86,7 @@ const sync = {
   enabled: false, loaded: false, applyingRemote: false,
   saveTimer: null, stateDoc: null,
   auth: null, authModule: null, firestoreModule: null, db: null, setDoc: null,
+  pendingRegistration: false,
 };
 
 function ensureTable(tableId) {
@@ -445,6 +446,8 @@ async function connectFirebase() {
     updateLoginMessage("Ready. Please sign in.");
 
     authMod.onAuthStateChanged(auth, async function(user) {
+      // Skip during registration — staff doc is being written, redirect is imminent
+      if (sync.pendingRegistration) return;
       if (!user) {
         document.body.classList.add("auth-locked");
         document.body.classList.remove("auth-ready");
@@ -566,20 +569,26 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!restaurantName || !ownerName) { updateRegisterMessage("Please fill in all fields.", true); return; }
 
     const newRestaurantId = slugify(restaurantName);
-    updateRegisterMessage("Creating account... redirecting to sign in.");
+    updateRegisterMessage("Creating account...");
     try {
+      // Set flag BEFORE createUser so onAuthStateChanged ignores the auto sign-in
+      sync.pendingRegistration = true;
       const cred = await sync.authModule.createUserWithEmailAndPassword(sync.auth, email, password);
+      // Write the staff/owner doc while the user is still authenticated
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
         { role: "owner", name: ownerName, email: email, restaurantId: newRestaurantId, createdAt: new Date().toISOString() }
       );
-      // Sign out BEFORE redirecting so onAuthStateChanged doesn't fire
-      // with the old restaurantId ("demo-restaurant") and wrongly reject the user.
+      // Sign out cleanly, then redirect — pendingRegistration flag prevents
+      // onAuthStateChanged from rejecting the user with "no access" mid-flow.
       await sync.authModule.signOut(sync.auth);
+      sync.pendingRegistration = false;
+      updateRegisterMessage("Account created! Redirecting to sign in...");
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set("restaurant", newRestaurantId);
       window.location.href = newUrl.href;
     } catch (err) {
+      sync.pendingRegistration = false;
       var msgs = {
         "auth/email-already-in-use": "This email is already registered. Please sign in.",
         "auth/invalid-email":        "Invalid email address.",
