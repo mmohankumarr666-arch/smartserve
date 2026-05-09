@@ -143,6 +143,35 @@
       }
       .admin-msg.error { background: #fef2f2; color: #c0392b; }
       .admin-msg.info  { background: #edf7f1; color: #1e8a4a; }
+
+      /* ── Restaurant Details settings section ── */
+      .restaurant-details-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 20px;
+      }
+      .restaurant-details-form .wide-field { grid-column: 1 / -1; }
+      .restaurant-details-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; }
+      .restaurant-details-form input,
+      .restaurant-details-form textarea {
+        padding: 8px 12px;
+        border: 1.5px solid #e4e2da;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-family: inherit;
+        background: #fff;
+      }
+      .restaurant-details-form textarea { resize: vertical; min-height: 64px; }
+      .details-save-msg {
+        font-size: 0.82rem;
+        color: #1e8a4a;
+        font-weight: 600;
+        min-height: 1.2em;
+      }
+      @media (max-width: 600px) {
+        .restaurant-details-form { grid-template-columns: 1fr; }
+        .restaurant-details-form .wide-field { grid-column: 1; }
+      }
     </style>
   </head>
   <body>
@@ -315,6 +344,46 @@
         <div id="menu-editor-list" class="menu-editor-list"></div>
       </section>
 
+      <!-- ══════════════════════════════════════════════
+           RESTAURANT DETAILS (for printed bills)
+      ══════════════════════════════════════════════ -->
+      <section class="menu-manager" aria-labelledby="restaurant-details-title">
+        <div class="section-title">
+          <h2 id="restaurant-details-title">Restaurant details</h2>
+          <span>Shown on every printed bill</span>
+        </div>
+        <form id="restaurant-details-form" class="restaurant-details-form">
+          <label class="wide-field">
+            Restaurant Name (for bill header)
+            <input id="detail-name" type="text" placeholder="e.g. Smart Cafe" />
+          </label>
+          <label class="wide-field">
+            Address
+            <textarea id="detail-address" placeholder="e.g. 12, Main Street, Coimbatore - 641001"></textarea>
+          </label>
+          <label>
+            Phone Number
+            <input id="detail-phone" type="text" placeholder="e.g. +91 98765 43210" />
+          </label>
+          <label>
+            GSTIN
+            <input id="detail-gstin" type="text" placeholder="e.g. 33AABCU9603R1ZX" maxlength="15" style="text-transform:uppercase" />
+          </label>
+          <label>
+            Email (optional)
+            <input id="detail-email" type="email" placeholder="e.g. info@smartcafe.com" />
+          </label>
+          <label>
+            FSSAI Number (optional)
+            <input id="detail-fssai" type="text" placeholder="e.g. 10013021005246" maxlength="14" />
+          </label>
+          <div class="form-actions wide-field" style="grid-column:1/-1">
+            <button id="save-details-btn" class="primary-action" type="submit">Save Details</button>
+            <p id="details-save-msg" class="details-save-msg"></p>
+          </div>
+        </form>
+      </section>
+
       <section class="history-board" aria-labelledby="history-title">
         <div class="section-title">
           <h2 id="history-title">Invoice history</h2>
@@ -332,7 +401,7 @@
     <script src="app.js"></script>
 
     <!-- ══════════════════════════════════════════════
-         ADMIN TAB LOGIC  (self-contained, no app.js changes needed)
+         ADMIN TAB LOGIC
     ══════════════════════════════════════════════ -->
     <script>
     (function () {
@@ -340,7 +409,6 @@
       let adminAuth, adminAuthMod, adminFsMod, adminDb;
       let adminBooted = false;
 
-      /* ── Tab switching (extend existing tabs) ── */
       const tabs = {
         login:    document.getElementById("tab-login"),
         register: document.getElementById("tab-register"),
@@ -364,14 +432,12 @@
       tabs.register.addEventListener("click", () => switchTab("register"));
       tabs.admin.addEventListener("click",    () => switchTab("admin"));
 
-      /* ── Admin message helper ── */
       function adminMsg(text, isError) {
         const el = document.getElementById("admin-login-message");
         el.textContent = text;
         el.className = "login-message" + (isError ? " error" : "");
       }
 
-      /* ── Boot Firebase for admin (shares same config) ── */
       async function bootAdmin() {
         adminBooted = true;
         adminMsg("Connecting…");
@@ -383,23 +449,14 @@
           ]);
           adminAuthMod = authM;
           adminFsMod   = fsM;
-
-          // Re-use existing Firebase app if already initialised by app.js,
-          // otherwise create a second named app.
           let app;
-          try {
-            app = appM.getApp("admin");
-          } catch {
-            app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "admin");
-          }
+          try { app = appM.getApp("admin"); }
+          catch { app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "admin"); }
           adminAuth = authM.getAuth(app);
           adminDb   = fsM.getFirestore(app);
-
           adminMsg("Ready. Sign in with your admin account.");
-
           authM.onAuthStateChanged(adminAuth, async (user) => {
             if (!user) return;
-            // Verify the user is in the "admins" collection
             const snap = await fsM.getDoc(fsM.doc(adminDb, "admins", user.uid));
             if (!snap.exists()) {
               adminMsg("This account is not an admin.", true);
@@ -414,7 +471,6 @@
         }
       }
 
-      /* ── Admin sign-in form submit ── */
       document.getElementById("admin-login-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         if (!adminAuthMod || !adminAuth) { adminMsg("Still connecting, please wait…", true); return; }
@@ -433,16 +489,13 @@
         }
       });
 
-      /* ── Show admin panel ── */
       function showAdminPanel(user) {
         document.getElementById("admin-email-label").textContent = user.email;
         document.getElementById("admin-panel").classList.add("visible");
-        // Hide the login screen behind the panel
         document.getElementById("login-screen").style.display = "none";
         loadSubscriptions();
       }
 
-      /* ── Admin sign-out ── */
       document.getElementById("admin-logout-btn").addEventListener("click", async () => {
         if (adminAuthMod && adminAuth) await adminAuthMod.signOut(adminAuth);
         document.getElementById("admin-panel").classList.remove("visible");
@@ -451,7 +504,6 @@
         adminMsg("Signed out.");
       });
 
-      /* ── Load subscriptions ── */
       async function loadSubscriptions() {
         document.getElementById("sub-cards").innerHTML = '<div class="admin-empty">Loading…</div>';
         try {
@@ -486,15 +538,14 @@
           return;
         }
         container.innerHTML = subs.map(sub => {
-          const expired  = isExpired(sub);
-          const expDate  = new Date(sub.expiryDate).toLocaleDateString("en-IN", { dateStyle: "medium" });
+          const expired   = isExpired(sub);
+          const expDate   = new Date(sub.expiryDate).toLocaleDateString("en-IN", { dateStyle: "medium" });
           const startDate = new Date(sub.createdAt || sub.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" });
           const defaultExtend = new Date();
           if (sub.plan === "yearly") defaultExtend.setFullYear(defaultExtend.getFullYear() + 1);
           else defaultExtend.setMonth(defaultExtend.getMonth() + 1);
           const defStr = defaultExtend.toISOString().split("T")[0];
           const today  = new Date().toISOString().split("T")[0];
-
           return `
           <div class="sub-card" id="acard-${escH(sub.restaurantId || sub._id)}">
             <div>
@@ -519,7 +570,6 @@
         }).join("");
       }
 
-      /* ── Exposed globally so inline onclick works ── */
       window.adminActivate = async function (rid) {
         const dateInput = document.getElementById("adate-" + rid);
         const newExpiry = new Date(dateInput.value);
