@@ -212,6 +212,7 @@ function renderDashboard() {
   document.querySelector("#table-count-input").value         = state.tableIds.length;
   document.querySelector("#customer-preview-link").href      = customerUrl(state.dashboardTable);
   document.querySelector("#kot-link").href = new URL("kot.html?restaurant=" + restaurantId, window.location.href).href;
+  document.querySelector("#report-link").href = new URL("sales-report.html?restaurant=" + restaurantId, window.location.href).href;
 
   var activeOrders = Object.values(state.sessions).reduce(function(s, ses) { return s + ses.orders.length; }, 0);
   document.querySelector("#active-orders-count").textContent = activeOrders + " active order" + (activeOrders === 1 ? "" : "s");
@@ -726,7 +727,79 @@ async function loadDashboardState(fsMod, db) {
     }
   }, function(e) { console.error("Orders listener failed", e); });
 }
-
+// ─── Staff management ─────────────────────────────────────────────────────────
+function renderStaffList(staffMembers, invites) {
+  var el = document.querySelector("#staff-list");
+  if (!el) return;
+  var all = [];
+  staffMembers.forEach(function(s) {
+    all.push({ name: s.name || "Unknown", email: s.email || "", role: s.role || "staff", status: "active", uid: s.uid });
+  });
+  invites.forEach(function(inv) {
+    all.push({ name: inv.name || "", email: inv.email || "", role: inv.role || "staff", status: "pending" });
+  });
+  if (!all.length) {
+    el.innerHTML = '<p style="font-size:.83rem;color:var(--text-muted)">No staff added yet. Use the form above to invite team members.</p>';
+    return;
+  }
+  el.innerHTML = all.map(function(s) {
+    var isPending = s.status === "pending";
+    return '<div class="staff-item">' +
+      '<div class="staff-item-left">' +
+        '<strong>' + escapeHtml(s.name) + (isPending ? ' <em style="font-size:.75rem;font-weight:400;color:var(--text-muted)">(invite sent)</em>' : '') + '</strong>' +
+        '<small>' + escapeHtml(s.email) + '</small>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span class="role-badge ' + (isPending ? "pending" : s.role) + '">' + (isPending ? "Invited" : s.role) + '</span>' +
+        (isPending ? '<button class="icon-action danger" data-remove-invite="' + escapeHtml(s.email) + '">Remove</button>' : '') +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+ 
+async function loadStaffList() {
+  if (!sync.enabled || !sync.firestoreModule || !sync.db) return;
+  var fsMod = sync.firestoreModule;
+  var db    = sync.db;
+  try {
+    var [staffSnap, inviteSnap] = await Promise.all([
+      fsMod.getDocs(fsMod.collection(db, "restaurants", restaurantId, "staff")),
+      fsMod.getDocs(fsMod.collection(db, "restaurants", restaurantId, "staff-invites")),
+    ]);
+    var staff   = [];
+    var invites = [];
+    staffSnap.forEach(function(d) { staff.push(Object.assign({ uid: d.id }, d.data())); });
+    inviteSnap.forEach(function(d) { if (d.data().status !== "accepted") invites.push(Object.assign({ email: d.id }, d.data())); });
+    renderStaffList(staff, invites);
+  } catch (e) { console.error("Load staff failed", e); }
+}
+ 
+async function addStaffInvite(name, email, role) {
+  if (!sync.enabled || !sync.firestoreModule || !sync.db) return "Firebase not connected.";
+  var fsMod = sync.firestoreModule;
+  var db    = sync.db;
+  try {
+    await fsMod.setDoc(
+      fsMod.doc(db, "restaurants", restaurantId, "staff-invites", email.toLowerCase()),
+      { name: name, role: role, addedAt: new Date().toISOString(), status: "pending" }
+    );
+    await loadStaffList();
+    return null; // success
+  } catch (e) {
+    console.error("Add staff failed", e);
+    return "Failed: " + e.message;
+  }
+}
+ 
+async function removeStaffInvite(email) {
+  if (!sync.enabled || !sync.firestoreModule || !sync.db) return;
+  var fsMod = sync.firestoreModule;
+  var db    = sync.db;
+  try {
+    await fsMod.deleteDoc(fsMod.doc(db, "restaurants", restaurantId, "staff-invites", email.toLowerCase()));
+    await loadStaffList();
+  } catch (e) { console.error("Remove invite failed", e); }
+}
 // ─── Boot — wait for DOM ──────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() {
 
@@ -870,6 +943,34 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Restaurant details form
   document.querySelector("#restaurant-details-form").addEventListener("submit", saveRestaurantDetails);
+  var staffForm = document.querySelector("#staff-invite-form");
+  if (staffForm) {
+    staffForm.addEventListener("submit", async function(e) {
+      e.preventDefault();
+      var name  = document.querySelector("#staff-name-input").value.trim();
+      var email = document.querySelector("#staff-email-input").value.trim().toLowerCase();
+      var role  = document.querySelector("#staff-role-input").value;
+      var msg   = document.querySelector("#staff-invite-msg");
+      var btn   = document.querySelector("#staff-invite-btn");
+      if (!name || !email) return;
+      btn.disabled = true; msg.textContent = "Adding…";
+      var err = await addStaffInvite(name, email, role);
+      if (err) {
+        msg.textContent = err; msg.style.color = "var(--red)";
+      } else {
+        msg.textContent = "✓ " + name + " added. Share your Restaurant ID with them.";
+        msg.style.color = "var(--green)";
+        document.querySelector("#staff-name-input").value  = "";
+        document.querySelector("#staff-email-input").value = "";
+      }
+      btn.disabled = false;
+      setTimeout(function() { msg.textContent = ""; }, 4000);
+    });
+  }
+  // Remove invite via delegated click (add inside the existing document.addEventListener("click",...) handler)
+  // Find: if (target.dataset.toggleInvoice) { ...}
+  // Add AFTER it:
+  // if (target.dataset.removeInvite) removeStaffInvite(target.dataset.removeInvite);
 
   document.addEventListener("click", function(event) {
     var target = event.target.closest("button");
@@ -882,5 +983,6 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   renderAll();
+  loadStaffList();
   connectFirebase();
 });
