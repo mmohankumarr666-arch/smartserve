@@ -420,48 +420,51 @@ function printBill() {
   var session = state.sessions[state.dashboardTable];
   var lines   = sessionLines(session);
   if (!lines.length) { alert("No orders on this table yet."); return; }
-  var total = totals(lines);
-  var now   = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  var rows  = lines.map(function(l) {
-    return '<tr><td>' + escapeHtml(l.name) + '</td><td style="text-align:center">' + l.qty + '</td>' +
-           '<td style="text-align:right">' + money(l.price) + '</td>' +
-           '<td style="text-align:right">' + money(l.price * l.qty) + '</td></tr>';
+  var total   = totals(lines);
+  var now     = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  var title   = restaurantId.replace(/-/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  var rows    = lines.map(function(l) {
+    return "<tr><td>" + escapeHtml(l.name) + "</td><td style='text-align:center'>" + l.qty +
+           "</td><td style='text-align:right'>" + money(l.price) +
+           "</td><td style='text-align:right'>" + money(l.price * l.qty) + "</td></tr>";
   }).join("");
+
+  var css = [
+    "body{font-family:monospace;font-size:13px;padding:24px;color:#111;max-width:380px;margin:auto}",
+    "h2{text-align:center;font-size:16px;margin-bottom:2px}",
+    ".sub{text-align:center;color:#666;font-size:11px;margin-bottom:16px}",
+    "table{width:100%;border-collapse:collapse;margin-bottom:12px}",
+    "th{border-bottom:2px solid #111;padding:4px 0;font-size:11px;text-align:left}",
+    "th:not(:first-child){text-align:center} th:last-child{text-align:right}",
+    "td{padding:3px 0;vertical-align:top}",
+    ".sep{border-top:1px dashed #999;margin:8px 0}",
+    ".row{display:flex;justify-content:space-between;padding:2px 0}",
+    ".row.grand{font-weight:bold;font-size:15px;border-top:2px solid #111;margin-top:4px;padding-top:6px}",
+    ".footer{text-align:center;margin-top:20px;font-size:11px;color:#888}",
+    "@media print{body{padding:0}}"
+  ].join("");
+
+  var html = "<!doctype html><html><head><meta charset='utf-8'>"
+    + "<title>Bill</title><style>" + css + "</style></head><body>"
+    + "<h2>" + escapeHtml(title) + "</h2>"
+    + "<div class='sub'>" + tableLabel(state.dashboardTable) + " &nbsp;|&nbsp; " + now + "</div>"
+    + "<table><thead><tr>"
+    + "<th>Item</th><th style='text-align:center'>Qty</th>"
+    + "<th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th>"
+    + "</tr></thead><tbody>" + rows + "</tbody></table>"
+    + "<div class='sep'></div>"
+    + "<div class='row'><span>Subtotal</span><span>" + money(total.subtotal) + "</span></div>"
+    + "<div class='row'><span>Service charge (4%)</span><span>" + money(total.service) + "</span></div>"
+    + "<div class='row'><span>GST (5%)</span><span>" + money(total.tax) + "</span></div>"
+    + "<div class='row grand'><span>Total</span><span>" + money(total.grand) + "</span></div>"
+    + "<div class='footer'>Thank you for dining with us!<br>Powered by SmartServe</div>"
+    + "<scr" + "ipt>window.onload=function(){window.print();}</" + "script>"
+    + "</body></html>";
+
   var win = window.open("", "_blank", "width=420,height=640");
-  win.document.write(\`<!doctype html><html><head><meta charset="utf-8">
-  <title>Bill – \${tableLabel(state.dashboardTable)}</title>
-  <style>
-    body{font-family:monospace;font-size:13px;padding:24px;color:#111;max-width:380px;margin:auto}
-    h2{text-align:center;font-size:16px;margin-bottom:2px}
-    .sub{text-align:center;color:#666;font-size:11px;margin-bottom:16px}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px}
-    th{border-bottom:2px solid #111;padding:4px 0;font-size:11px;text-align:left}
-    th:not(:first-child){text-align:center}
-    th:last-child{text-align:right}
-    td{padding:3px 0;vertical-align:top}
-    .sep{border-top:1px dashed #999;margin:8px 0}
-    .row{display:flex;justify-content:space-between;padding:2px 0}
-    .row.grand{font-weight:bold;font-size:15px;border-top:2px solid #111;margin-top:4px;padding-top:6px}
-    .footer{text-align:center;margin-top:20px;font-size:11px;color:#888}
-    @media print{body{padding:0}}
-  </style></head><body>
-  <h2>\${escapeHtml(restaurantId.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</h2>
-  <div class="sub">\${tableLabel(state.dashboardTable)} &nbsp;|&nbsp; \${now}</div>
-  <table>
-    <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amt</th></tr></thead>
-    <tbody>\${rows}</tbody>
-  </table>
-  <div class="sep"></div>
-  <div class="row"><span>Subtotal</span><span>\${money(total.subtotal)}</span></div>
-  <div class="row"><span>Service charge (4%)</span><span>\${money(total.service)}</span></div>
-  <div class="row"><span>GST (5%)</span><span>\${money(total.tax)}</span></div>
-  <div class="row grand"><span>Total</span><span>\${money(total.grand)}</span></div>
-  <div class="footer">Thank you for dining with us!<br>Powered by SmartServe</div>
-  <script>window.onload=function(){window.print();}<\/script>
-  </body></html>\`);
+  win.document.write(html);
   win.document.close();
 }
-
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 async function connectFirebase() {
   if (!firebaseConfigIsReady()) {
