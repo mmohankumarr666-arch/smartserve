@@ -66,7 +66,6 @@ function totals(lines) {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const params          = new URLSearchParams(window.location.search);
-// restaurantId is a let — it will be overwritten after login using the staff doc
 let restaurantId      = resolveRestaurantId();
 const initialTableIds = ["T1", "T2", "T3", "T4"];
 
@@ -83,9 +82,19 @@ const state = {
   invoices: [],
 };
 
+// ─── Restaurant details (for printed bills) ───────────────────────────────────
+const restaurantDetails = {
+  name:    "",
+  address: "",
+  phone:   "",
+  gstin:   "",
+  email:   "",
+  fssai:   "",
+};
+
 const sync = {
   enabled: false, loaded: false, applyingRemote: false,
-  saveTimer: null, stateDoc: null,
+  saveTimer: null, stateDoc: null, detailsDoc: null,
   auth: null, authModule: null, firestoreModule: null, db: null, setDoc: null,
   pendingRegistration: false,
 };
@@ -295,6 +304,16 @@ function renderHistory() {
   }).join("");
 }
 
+// ─── Render restaurant details form ──────────────────────────────────────────
+function renderDetailsForm() {
+  document.querySelector("#detail-name").value    = restaurantDetails.name    || "";
+  document.querySelector("#detail-address").value = restaurantDetails.address || "";
+  document.querySelector("#detail-phone").value   = restaurantDetails.phone   || "";
+  document.querySelector("#detail-gstin").value   = restaurantDetails.gstin   || "";
+  document.querySelector("#detail-email").value   = restaurantDetails.email   || "";
+  document.querySelector("#detail-fssai").value   = restaurantDetails.fssai   || "";
+}
+
 function renderAll() {
   renderDashboard();
   renderBill();
@@ -422,8 +441,19 @@ function printBill() {
   if (!lines.length) { alert("No orders on this table yet."); return; }
   var total   = totals(lines);
   var now     = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  var title   = restaurantId.replace(/-/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-  var rows    = lines.map(function(l) {
+
+  // Use saved restaurant details, fall back to restaurantId-derived name
+  var billName    = restaurantDetails.name    || restaurantId.replace(/-/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  var billAddress = restaurantDetails.address || "";
+  var billPhone   = restaurantDetails.phone   || "";
+  var billGstin   = restaurantDetails.gstin   || "";
+  var billEmail   = restaurantDetails.email   || "";
+  var billFssai   = restaurantDetails.fssai   || "";
+
+  // Invoice number: next in sequence (invoices.length + 1 since this hasn't been closed yet)
+  var invoiceNum  = "INV-" + String(state.invoices.length + 1).padStart(3, "0");
+
+  var rows = lines.map(function(l) {
     return "<tr><td>" + escapeHtml(l.name) + "</td><td style='text-align:center'>" + l.qty +
            "</td><td style='text-align:right'>" + money(l.price) +
            "</td><td style='text-align:right'>" + money(l.price * l.qty) + "</td></tr>";
@@ -432,7 +462,8 @@ function printBill() {
   var css = [
     "body{font-family:monospace;font-size:13px;padding:24px;color:#111;max-width:380px;margin:auto}",
     "h2{text-align:center;font-size:16px;margin-bottom:2px}",
-    ".sub{text-align:center;color:#666;font-size:11px;margin-bottom:16px}",
+    ".sub{text-align:center;color:#666;font-size:11px;margin-bottom:4px}",
+    ".inv-no{text-align:center;font-size:11px;font-weight:700;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}",
     "table{width:100%;border-collapse:collapse;margin-bottom:12px}",
     "th{border-bottom:2px solid #111;padding:4px 0;font-size:11px;text-align:left}",
     "th:not(:first-child){text-align:center} th:last-child{text-align:right}",
@@ -440,14 +471,24 @@ function printBill() {
     ".sep{border-top:1px dashed #999;margin:8px 0}",
     ".row{display:flex;justify-content:space-between;padding:2px 0}",
     ".row.grand{font-weight:bold;font-size:15px;border-top:2px solid #111;margin-top:4px;padding-top:6px}",
-    ".footer{text-align:center;margin-top:20px;font-size:11px;color:#888}",
+    ".footer{text-align:center;margin-top:16px;font-size:11px;color:#888;border-top:1px dashed #ccc;padding-top:10px}",
+    ".footer p{margin:2px 0}",
     "@media print{body{padding:0}}"
   ].join("");
 
+  // Build header info lines
+  var headerLines = "";
+  if (billAddress) headerLines += "<div class='sub'>" + escapeHtml(billAddress).replace(/\n/g, "<br>") + "</div>";
+  if (billPhone)   headerLines += "<div class='sub'>Ph: " + escapeHtml(billPhone) + "</div>";
+  if (billEmail)   headerLines += "<div class='sub'>" + escapeHtml(billEmail) + "</div>";
+  if (billGstin)   headerLines += "<div class='sub'>GSTIN: " + escapeHtml(billGstin.toUpperCase()) + "</div>";
+  if (billFssai)   headerLines += "<div class='sub'>FSSAI: " + escapeHtml(billFssai) + "</div>";
+
   var html = "<!doctype html><html><head><meta charset='utf-8'>"
-    + "<title>Bill</title><style>" + css + "</style></head><body>"
-    + "<h2>" + escapeHtml(title) + "</h2>"
-    + "<div class='sub'>" + tableLabel(state.dashboardTable) + " &nbsp;|&nbsp; " + now + "</div>"
+    + "<title>Bill - " + invoiceNum + "</title><style>" + css + "</style></head><body>"
+    + "<h2>" + escapeHtml(billName) + "</h2>"
+    + headerLines
+    + "<div class='inv-no'>" + invoiceNum + " &nbsp;|&nbsp; " + tableLabel(state.dashboardTable) + " &nbsp;|&nbsp; " + now + "</div>"
     + "<table><thead><tr>"
     + "<th>Item</th><th style='text-align:center'>Qty</th>"
     + "<th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th>"
@@ -457,13 +498,60 @@ function printBill() {
     + "<div class='row'><span>Service charge (4%)</span><span>" + money(total.service) + "</span></div>"
     + "<div class='row'><span>GST (5%)</span><span>" + money(total.tax) + "</span></div>"
     + "<div class='row grand'><span>Total</span><span>" + money(total.grand) + "</span></div>"
-    + "<div class='footer'>Thank you for dining with us!<br>Powered by SmartServe</div>"
+    + "<div class='footer'><p>Thank you for dining with us!</p><p>Powered by SmartServe</p></div>"
     + "<scr" + "ipt>window.onload=function(){window.print();}</" + "script>"
     + "</body></html>";
 
-  var win = window.open("", "_blank", "width=420,height=640");
+  var win = window.open("", "_blank", "width=420,height=680");
   win.document.write(html);
   win.document.close();
+}
+
+// ─── Restaurant details — save & load ─────────────────────────────────────────
+async function saveRestaurantDetails(event) {
+  event.preventDefault();
+  restaurantDetails.name    = document.querySelector("#detail-name").value.trim();
+  restaurantDetails.address = document.querySelector("#detail-address").value.trim();
+  restaurantDetails.phone   = document.querySelector("#detail-phone").value.trim();
+  restaurantDetails.gstin   = document.querySelector("#detail-gstin").value.trim().toUpperCase();
+  restaurantDetails.email   = document.querySelector("#detail-email").value.trim();
+  restaurantDetails.fssai   = document.querySelector("#detail-fssai").value.trim();
+
+  var msg = document.querySelector("#details-save-msg");
+
+  if (sync.enabled && sync.detailsDoc && sync.setDoc) {
+    try {
+      await sync.setDoc(sync.detailsDoc, Object.assign({}, restaurantDetails, { updatedAt: new Date().toISOString() }), { merge: true });
+      msg.textContent = "Saved to Firebase ✓";
+    } catch (e) {
+      console.error("Details save failed", e);
+      msg.textContent = "Save failed — check connection.";
+    }
+  } else {
+    msg.textContent = "Saved locally ✓";
+  }
+  setTimeout(function() { msg.textContent = ""; }, 3000);
+}
+
+async function loadRestaurantDetails(fsMod, db) {
+  if (!sync.detailsDoc) return;
+  try {
+    var snap = await fsMod.getDoc(sync.detailsDoc);
+    if (snap.exists()) {
+      var data = snap.data();
+      Object.assign(restaurantDetails, {
+        name:    data.name    || "",
+        address: data.address || "",
+        phone:   data.phone   || "",
+        gstin:   data.gstin   || "",
+        email:   data.email   || "",
+        fssai:   data.fssai   || "",
+      });
+      renderDetailsForm();
+    }
+  } catch (e) {
+    console.error("Details load failed", e);
+  }
 }
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
@@ -493,7 +581,6 @@ async function connectFirebase() {
     sync.firestoreModule = fsMod;
     sync.db              = db;
     sync.setDoc          = fsMod.setDoc;
-    // stateDoc is set later, once we know the correct restaurantId from the staff doc
 
     updateLoginMessage("Ready. Please sign in.");
 
@@ -509,26 +596,21 @@ async function connectFirebase() {
       }
 
       try {
-        // ── STEP 1: Resolve restaurantId from staffIndex (fast) ───────────────
-        // staffIndex/{uid} stores { restaurantId } so we never have to guess.
         let resolvedRestaurantId = null;
         let staffDocExists = false;
 
         const indexSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", user.uid));
         if (indexSnap.exists()) {
           resolvedRestaurantId = indexSnap.data().restaurantId;
-          // Verify the actual staff doc still exists
           const staffSnap = await fsMod.getDoc(
             fsMod.doc(db, "restaurants", resolvedRestaurantId, "staff", user.uid)
           );
           staffDocExists = staffSnap.exists();
           if (staffDocExists && staffSnap.data().restaurantId) {
-            // Trust the value stored in the staff doc itself (most authoritative)
             resolvedRestaurantId = staffSnap.data().restaurantId;
           }
         }
 
-        // ── STEP 2: Fallback — try the URL param restaurant if provided ───────
         if (!staffDocExists) {
           const urlRestaurantId = resolveRestaurantId();
           if (urlRestaurantId && urlRestaurantId !== "demo-restaurant") {
@@ -538,7 +620,6 @@ async function connectFirebase() {
             if (staffSnap.exists()) {
               resolvedRestaurantId = staffSnap.data().restaurantId || urlRestaurantId;
               staffDocExists = true;
-              // Backfill the staffIndex so future logins are fast
               await fsMod.setDoc(
                 fsMod.doc(db, "staffIndex", user.uid),
                 { restaurantId: resolvedRestaurantId, email: user.email, createdAt: new Date().toISOString() },
@@ -550,14 +631,10 @@ async function connectFirebase() {
 
         if (!resolvedRestaurantId || !staffDocExists) {
           await authMod.signOut(auth);
-          updateLoginMessage(
-            "No restaurant found for this account. Contact support on WhatsApp: 8610741387",
-            true
-          );
+          updateLoginMessage("No restaurant found for this account. Contact support on WhatsApp: 8610741387", true);
           return;
         }
 
-        // ── STEP 3: Subscription check ────────────────────────────────────────
         const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", resolvedRestaurantId));
         if (!subSnap.exists()) {
           await authMod.signOut(auth);
@@ -571,11 +648,10 @@ async function connectFirebase() {
           return;
         }
 
-        // ── STEP 4: All good — wire up the live restaurantId ──────────────────
-        restaurantId  = resolvedRestaurantId;
-        sync.stateDoc = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
+        restaurantId   = resolvedRestaurantId;
+        sync.stateDoc  = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
+        sync.detailsDoc = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "details");
 
-        // Update the URL so bookmarking and page refresh work
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set("restaurant", restaurantId);
         window.history.replaceState({}, "", newUrl.toString());
@@ -604,6 +680,9 @@ async function loadDashboardState(fsMod, db) {
   const snap = await fsMod.getDoc(sync.stateDoc);
   if (snap.exists()) { applyRemoteState(snap.data()); }
   else               { await sync.setDoc(sync.stateDoc, serializeState(), { merge: true }); }
+
+  // Load restaurant details
+  await loadRestaurantDetails(fsMod, db);
 
   sync.loaded = true;
   updateSyncStatus("Firebase live");
@@ -647,7 +726,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   document.body.classList.add("auth-locked");
 
-  // Tab switching
   document.querySelector("#tab-login").addEventListener("click", function() {
     document.querySelector("#tab-login").classList.add("active");
     document.querySelector("#tab-register").classList.remove("active");
@@ -661,7 +739,6 @@ document.addEventListener("DOMContentLoaded", function() {
     document.querySelector("#login-form").classList.add("hidden");
   });
 
-  // Login submit
   document.querySelector("#login-form").addEventListener("submit", async function(e) {
     e.preventDefault();
     if (!sync.auth || !sync.authModule) { updateLoginMessage("Firebase not ready yet, please wait.", true); return; }
@@ -681,7 +758,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // ─── Register submit ───────────────────────────────────────────────────────
   document.querySelector("#register-form").addEventListener("submit", async function(e) {
     e.preventDefault();
     if (!sync.auth || !sync.authModule || !sync.firestoreModule || !sync.db) {
@@ -713,19 +789,16 @@ document.addEventListener("DOMContentLoaded", function() {
         createdAt:    new Date().toISOString(),
       };
 
-      // Write staff doc under the restaurant
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
         staffDocData
       );
 
-      // Write top-level staffIndex for fast uid → restaurantId lookup at login
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "staffIndex", cred.user.uid),
         { restaurantId: newRestaurantId, email: email, createdAt: new Date().toISOString() }
       );
 
-      // Write subscription doc (status: "pending" until admin activates)
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "subscriptions", newRestaurantId),
         {
@@ -777,12 +850,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // Sign out
   document.querySelector("#logout-btn").addEventListener("click", async function() {
     if (sync.authModule && sync.auth) await sync.authModule.signOut(sync.auth);
   });
 
-  // Form / table controls
   var printBtn = document.querySelector("#print-bill-btn");
   if (printBtn) printBtn.addEventListener("click", printBill);
   document.querySelector("#menu-form").addEventListener("submit", saveMenuItem);
@@ -791,7 +862,9 @@ document.addEventListener("DOMContentLoaded", function() {
   document.querySelector("#add-table-btn").addEventListener("click", addTable);
   document.querySelector("#close-table-btn").addEventListener("click", closeTable);
 
-  // Delegated clicks
+  // Restaurant details form
+  document.querySelector("#restaurant-details-form").addEventListener("submit", saveRestaurantDetails);
+
   document.addEventListener("click", function(event) {
     var target = event.target.closest("button");
     if (!target) return;
