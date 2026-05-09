@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SmartServe Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="login-screen" class="login-screen">
+      <div class="login-card">
+        <div>
+          <p class="eyebrow">Staff portal</p>
+          <h1>SmartServe</h1>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" type="button">Sign In</button>
+          <button class="auth-tab" id="tab-register" type="button">Register</button>
+        </div>
+
+        <!-- Login form -->
+        <form id="login-form" class="auth-form">
+          <label>Email<input id="staff-email" type="email" autocomplete="email" required /></label>
+          <label>Password<input id="staff-password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary-action" type="submit">Sign In</button>
+          <p id="login-message" class="login-message">Use your staff account to sign in.</p>
+        </form>
+
+        <!-- Register form -->
+        <form id="register-form" class="auth-form hidden">
+          <label>Restaurant Name<input id="reg-restaurant" type="text" placeholder="e.g. Smart Cafe" required /></label>
+          <label>Your Name<input id="reg-name" type="text" placeholder="e.g. Ravi Kumar" required /></label>
+          <label>Email<input id="reg-email" type="email" autocomplete="email" required /></label>
+          <label>Password (min 6 chars)<input id="reg-password" type="password" autocomplete="new-password" minlength="6" required /></label>
+          <button class="primary-action" type="submit">Create Account</button>
+          <p id="register-message" class="login-message">You will be the owner of this restaurant.</p>
+        </form>
+      </div>
+    </section>
+
+    <main class="shell dashboard-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Restaurant dashboard</p>
+          <h1>SmartServe</h1>
+        </div>
+        <div class="dashboard-actions">
+          <div id="live-indicator" class="live-indicator">
+            <span></span>
+            <strong id="sync-status">Local prototype</strong>
+          </div>
+          <a id="customer-preview-link" class="primary-link" href="customer.html?table=T1" target="_blank" rel="noopener">Customer Preview</a>
+          <button id="logout-btn" class="secondary-action" type="button">Sign Out</button>
+        </div>
+      </header>
+
+      <section class="status-strip" aria-label="Restaurant status">
+        <div><span class="status-label">Restaurant id</span><strong id="restaurant-id-label">demo-restaurant</strong></div>
+        <div><span class="status-label">Selected table</span><strong id="active-table-label">Table 1</strong></div>
+        <div><span class="status-label">Open sessions</span><strong id="open-session-count">0</strong></div>
+        <div><span class="status-label">Invoices saved</span><strong id="invoice-count">0</strong></div>
+      </section>
+
+      <div id="notification" class="notification hidden" role="status">
+        <strong>New order received</strong>
+        <span id="notification-text"></span>
+      </div>
+
+      <section class="dashboard-grid">
+        <section class="tables-board" aria-labelledby="tables-title">
+          <div class="section-title">
+            <div>
+              <h2 id="tables-title">Table floor + QR codes</h2>
+              <span id="active-orders-count">0 active orders</span>
+            </div>
+            <form id="table-count-form" class="table-count-form">
+              <label>Total tables<input id="table-count-input" type="text" inputmode="numeric" value="4" /></label>
+              <button class="secondary-action" type="submit">Set</button>
+              <button id="add-table-btn" class="primary-action" type="button">Add Table</button>
+            </form>
+          </div>
+          <div id="table-cards" class="table-cards table-cards-qr"></div>
+        </section>
+
+        <section class="bill-board" aria-labelledby="bill-title">
+          <div class="section-title">
+            <h2 id="bill-title">Itemized bill</h2>
+            <span id="bill-state">Table 1</span>
+          </div>
+          <div id="bill-detail" class="bill-detail"></div>
+          <button id="close-table-btn" class="close-action">Close Table</button>
+        </section>
+      </section>
+
+      <section class="menu-manager" aria-labelledby="menu-manager-title">
+        <div class="section-title">
+          <h2 id="menu-manager-title">Menu manager</h2>
+          <span>Edit what customers see instantly</span>
+        </div>
+        <form id="menu-form" class="menu-form">
+          <input type="hidden" id="menu-item-id" />
+          <label>Item name<input id="menu-name" type="text" placeholder="Masala Dosa" required /></label>
+          <label>Price<input id="menu-price" type="text" inputmode="numeric" placeholder="180" required /></label>
+          <label>Category
+            <select id="menu-category" required>
+              <option value="popular">Popular</option>
+              <option value="mains">Mains</option>
+              <option value="drinks">Drinks</option>
+              <option value="dessert">Dessert</option>
+            </select>
+          </label>
+          <label class="wide-field">Description<input id="menu-desc" type="text" placeholder="Short menu description" required /></label>
+          <label class="toggle-field"><input id="menu-available" type="checkbox" checked /> Available to order</label>
+          <div class="form-actions">
+            <button id="save-menu-item-btn" class="primary-action" type="submit">Add Item</button>
+            <button id="cancel-menu-edit-btn" class="secondary-action" type="button">Clear</button>
+          </div>
+        </form>
+        <div id="menu-editor-list" class="menu-editor-list"></div>
+      </section>
+
+      <section class="history-board" aria-labelledby="history-title">
+        <div class="section-title">
+          <h2 id="history-title">Invoice history</h2>
+          <span>Saved in Firebase</span>
+        </div>
+        <div id="invoice-history" class="invoice-history empty">No closed tables yet.</div>
+      </section>
+    </main>
+
+    <audio id="beep" preload="auto">
+      <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAP//" type="audio/wav" />
+    </audio>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
