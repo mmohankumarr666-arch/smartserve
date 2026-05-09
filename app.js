@@ -689,7 +689,8 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   // Form / table controls
-  document.querySelector("#print-bill-btn").addEventListener("click", printBill);
+  var printBtn = document.querySelector("#print-bill-btn");
+  if (printBtn) printBtn.addEventListener("click", printBill);
   document.querySelector("#menu-form").addEventListener("submit", saveMenuItem);
   document.querySelector("#cancel-menu-edit-btn").addEventListener("click", function() { resetMenuForm(); renderAll(); });
   document.querySelector("#table-count-form").addEventListener("submit", setTableCount);
