@@ -298,6 +298,16 @@ document.addEventListener("click", (event) => {
 
 document.querySelector("#place-order-btn").addEventListener("click", placeOrder);
 document.querySelector("#request-bill-btn").addEventListener("click", requestBill);
+// Cart toggle
+const cartToggleBtn = document.querySelector("#cart-toggle-btn");
+const cartBody = document.querySelector("#cart-body");
+const cartArrow = document.querySelector("#cart-arrow");
+let cartOpen = false;
 
+cartToggleBtn.addEventListener("click", () => {
+  cartOpen = !cartOpen;
+  cartBody.style.display = cartOpen ? "block" : "none";
+  cartArrow.style.transform = cartOpen ? "rotate(180deg)" : "rotate(0deg)";
+});
 renderAll();
 connectFirebase();
