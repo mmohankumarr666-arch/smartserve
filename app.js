@@ -414,7 +414,6 @@ function showNotification(tableId, itemCount) {
   showNotification.timer = setTimeout(function() { notice.classList.add("hidden"); }, 3200);
 }
 
-
 // ─── Print Bill ───────────────────────────────────────────────────────────────
 function printBill() {
   var session = state.sessions[state.dashboardTable];
@@ -465,6 +464,7 @@ function printBill() {
   win.document.write(html);
   win.document.close();
 }
+
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 async function connectFirebase() {
   if (!firebaseConfigIsReady()) {
@@ -497,7 +497,6 @@ async function connectFirebase() {
     updateLoginMessage("Ready. Please sign in.");
 
     authMod.onAuthStateChanged(auth, async function(user) {
-      // Skip during registration — staff doc is being written, redirect is imminent
       if (sync.pendingRegistration) return;
       if (!user) {
         document.body.classList.add("auth-locked");
@@ -516,14 +515,13 @@ async function connectFirebase() {
       const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", restaurantId));
       if (!subSnap.exists()) {
         await authMod.signOut(auth);
-        updateLoginMessage("No subscription found for this restaurant. Contact support.", true);
+        updateLoginMessage("No subscription found. Please complete payment to activate your account.", true);
         return;
       }
       const sub = subSnap.data();
       if (sub.status !== "active" || new Date(sub.expiryDate) < new Date()) {
         await authMod.signOut(auth);
-        const expiry = new Date(sub.expiryDate).toLocaleDateString("en-IN");
-        updateLoginMessage("Subscription expired on " + expiry + ". Contact support to renew.", true);
+        updateLoginMessage("Your account is pending activation. Please contact us on WhatsApp: 8610741387", true);
         return;
       }
       document.body.classList.remove("auth-locked");
@@ -621,57 +619,79 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // Register submit
+  // ─── Register submit → create account then redirect to WhatsApp ───────────
   document.querySelector("#register-form").addEventListener("submit", async function(e) {
     e.preventDefault();
     if (!sync.auth || !sync.authModule || !sync.firestoreModule || !sync.db) {
       updateRegisterMessage("Firebase not ready yet, please wait.", true); return;
     }
+
     const restaurantName = document.querySelector("#reg-restaurant").value.trim();
     const ownerName      = document.querySelector("#reg-name").value.trim();
     const email          = document.querySelector("#reg-email").value.trim();
     const password       = document.querySelector("#reg-password").value;
-    if (!restaurantName || !ownerName) { updateRegisterMessage("Please fill in all fields.", true); return; }
+    const plan           = document.querySelector("#reg-plan").value;
+
+    if (!restaurantName || !ownerName) {
+      updateRegisterMessage("Please fill in all fields.", true); return;
+    }
 
     const newRestaurantId = slugify(restaurantName);
-    updateRegisterMessage("Creating account...");
+    updateRegisterMessage("Creating your account...");
+
     try {
       // Set flag BEFORE createUser so onAuthStateChanged ignores the auto sign-in
       sync.pendingRegistration = true;
       const cred = await sync.authModule.createUserWithEmailAndPassword(sync.auth, email, password);
-      // Write the staff/owner doc while the user is still authenticated
+
+      // Write staff/owner doc
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
         { role: "owner", name: ownerName, email: email, restaurantId: newRestaurantId, createdAt: new Date().toISOString() }
       );
-      // Write subscription doc (staff doc must exist first for rules to pass)
-      const plan      = document.querySelector("#reg-plan").value;
-      const startDate = new Date();
-      const expiryDate = new Date(startDate);
-      if (plan === "yearly") { expiryDate.setFullYear(expiryDate.getFullYear() + 1); }
-      else                   { expiryDate.setMonth(expiryDate.getMonth() + 1); }
+
+      // Write subscription doc with status "pending" — admin must activate it
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "subscriptions", newRestaurantId),
         {
-          restaurantId: newRestaurantId,
+          restaurantId:   newRestaurantId,
           restaurantName: restaurantName,
-          ownerName: ownerName,
-          ownerEmail: email,
-          plan: plan,
-          startDate: startDate.toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          status: "active",
-          createdAt: new Date().toISOString(),
+          ownerName:      ownerName,
+          ownerEmail:     email,
+          plan:           plan,
+          startDate:      new Date().toISOString(),
+          expiryDate:     new Date().toISOString(), // admin will set real expiry on activation
+          status:         "pending",
+          createdAt:      new Date().toISOString(),
         }
       );
-      // Sign out cleanly, then redirect — pendingRegistration flag prevents
-      // onAuthStateChanged from rejecting the user with "no access" mid-flow.
+
+      // Sign out cleanly before redirect
       await sync.authModule.signOut(sync.auth);
       sync.pendingRegistration = false;
-      updateRegisterMessage("Account created! Redirecting to sign in...");
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set("restaurant", newRestaurantId);
-      window.location.href = newUrl.href;
+
+      // Build WhatsApp message with all details
+      const planLabel = plan === "yearly" ? "Yearly — ₹4,999/year" : "Monthly — ₹499/month";
+      const waMessage = encodeURIComponent(
+        "Hi! I just registered on SmartServe.\n\n" +
+        "Restaurant: " + restaurantName + "\n" +
+        "Owner: " + ownerName + "\n" +
+        "Email: " + email + "\n" +
+        "Plan: " + planLabel + "\n\n" +
+        "Please activate my account after payment. Thank you!"
+      );
+      const waUrl = "https://wa.me/918610741387?text=" + waMessage;
+
+      updateRegisterMessage("Account created! Redirecting to WhatsApp...");
+
+      // Small delay so the user sees the message, then open WhatsApp
+      setTimeout(function () {
+        window.open(waUrl, "_blank");
+        // Show sign-in tab with a helpful message
+        document.querySelector("#tab-login").click();
+        updateLoginMessage("Account created! After payment is confirmed, you will be activated and can sign in here.", false);
+      }, 1200);
+
     } catch (err) {
       sync.pendingRegistration = false;
       var msgs = {
