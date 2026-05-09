@@ -28,20 +28,25 @@
 
       <section id="menu-grid" class="menu-grid customer-menu-grid" aria-label="Restaurant menu"></section>
 
-      <aside class="cart-panel customer-cart" aria-labelledby="cart-title">
-        <div class="panel-heading compact">
-          <div>
-            <p class="eyebrow">Same-table bill</p>
-            <h2 id="cart-title">Current round</h2>
-          </div>
-          <strong id="cart-total">₹0</strong>
-        </div>
-        <div id="cart-lines" class="cart-lines empty">Add items to begin.</div>
-        <div class="customer-actions">
-          <button id="place-order-btn" class="primary-action" disabled>Place Order</button>
-          <button id="request-bill-btn" class="secondary-action">Request Bill</button>
-        </div>
-      </aside>
+<aside class="cart-panel customer-cart" aria-labelledby="cart-title">
+  <div class="panel-heading compact" id="cart-toggle-btn" style="cursor:pointer;">
+    <div>
+      <p class="eyebrow">Same-table bill</p>
+      <h2 id="cart-title">Current round</h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <strong id="cart-total">₹0</strong>
+      <span id="cart-arrow" style="font-size:20px;transition:transform 0.25s;">▼</span>
+    </div>
+  </div>
+  <div id="cart-body" style="display:none;">
+    <div id="cart-lines" class="cart-lines empty">Add items to begin.</div>
+    <div class="customer-actions">
+      <button id="place-order-btn" class="primary-action" disabled>Place Order</button>
+      <button id="request-bill-btn" class="secondary-action">Request Bill</button>
+    </div>
+  </div>
+</aside>
     </main>
 
     <script src="firebase-config.js"></script>
