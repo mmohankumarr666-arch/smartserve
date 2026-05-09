@@ -211,6 +211,7 @@ function renderDashboard() {
   document.querySelector("#invoice-count").textContent       = state.invoices.length;
   document.querySelector("#table-count-input").value         = state.tableIds.length;
   document.querySelector("#customer-preview-link").href      = customerUrl(state.dashboardTable);
+  document.querySelector("#kot-link").href = new URL("kot.html?restaurant=" + restaurantId, window.location.href).href;
 
   var activeOrders = Object.values(state.sessions).reduce(function(s, ses) { return s + ses.orders.length; }, 0);
   document.querySelector("#active-orders-count").textContent = activeOrders + " active order" + (activeOrders === 1 ? "" : "s");
