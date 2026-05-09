@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartServe — Kitchen Display</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #181c27;
+      --surface-2: #1e2333;
+      --border:    #2a3047;
+      --text:      #e8eaf0;
+      --muted:     #6b7394;
+      --green:     #22c55e;
+      --green-dim: #166534;
+      --amber:     #f59e0b;
+      --amber-dim: #92400e;
+      --red:       #ef4444;
+      --blue:      #60a5fa;
+      --accent:    #f59e0b;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 14px; }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 4px 10px;
+      border: 1.5px solid var(--accent);
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .page-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    .status-text {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .filter-tab {
+      padding: 5px 14px;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+
+    .filter-tab.active {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .badge-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: var(--amber);
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: 700;
+      margin-left: 5px;
+      font-family: var(--mono);
+    }
+
+    .btn-sound {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: border-color .15s, color .15s;
+    }
+    .btn-sound:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sound.muted-state { color: var(--red); border-color: var(--red); }
+
+    /* ── Login overlay ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .overlay.hidden { display: none; }
+
+    .login-box {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .login-box h2 { font-size: 1.2rem; font-weight: 700; }
+
+    .login-box p {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .field input {
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    .field input:focus { border-color: var(--accent); }
+
+    .btn-primary {
+      padding: 11px 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: opacity .15s;
+    }
+    .btn-primary:hover { opacity: .85; }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .login-msg {
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+    .login-msg.error { color: var(--red); }
+
+    /* ── Main board ── */
+    .board {
+      padding: 20px 20px 40px;
+    }
+
+    /* Empty / loading states */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .empty-state .icon { font-size: 2.5rem; opacity: .4; }
+    .empty-state p { font-size: 0.9rem; font-weight: 500; }
+    .empty-state small { font-size: 0.78rem; opacity: .7; }
+
+    /* ── Ticket grid ── */
+    .ticket-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    /* ── KOT Ticket card ── */
+    .ticket {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color .2s, box-shadow .2s;
+      animation: ticketIn .3s ease;
+    }
+
+    @keyframes ticketIn {
+      from { opacity: 0; transform: translateY(10px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0)  scale(1); }
+    }
+
+    .ticket.new-order {
+      border-color: var(--amber);
+      box-shadow: 0 0 0 1px var(--amber), 0 0 20px rgba(245,158,11,.15);
+    }
+
+    .ticket.done {
+      border-color: var(--border);
+      opacity: .55;
+    }
+
+    /* Ticket header */
+    .ticket-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+
+    .table-label {
+      font-family: var(--mono);
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.02em;
+    }
+
+    .ticket-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .ticket-time {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .ticket-status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-family: var(--mono);
+    }
+
+    .ticket-status-badge.pending  { background: rgba(245,158,11,.15); color: var(--amber); }
+    .ticket-status-badge.done     { background: rgba(34,197,94,.12);  color: var(--green); }
+
+    /* Elapsed timer */
+    .elapsed {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .elapsed.warn  { color: var(--amber); }
+    .elapsed.alert { color: var(--red); animation: blink 1s infinite; }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* Ticket items */
+    .ticket-items {
+      padding: 12px 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .kot-item {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .kot-item-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .kot-item-qty {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+      background: rgba(245,158,11,.1);
+      padding: 1px 7px;
+      border-radius: 5px;
+      flex-shrink: 0;
+    }
+
+    /* Ticket footer */
+    .ticket-foot {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .item-count {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .btn-done {
+      padding: 8px 20px;
+      background: rgba(34,197,94,.12);
+      color: var(--green);
+      border: 1.5px solid rgba(34,197,94,.3);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: background .15s, border-color .15s;
+      letter-spacing: .02em;
+    }
+
+    .btn-done:hover {
+      background: rgba(34,197,94,.2);
+      border-color: var(--green);
+    }
+
+    .btn-done:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .btn-undo {
+      padding: 8px 14px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: color .15s, border-color .15s;
+    }
+
+    .btn-undo:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+    }
+
+    .stat-chip .num {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .stat-chip .lbl { color: var(--muted); font-weight: 500; }
+    .stat-chip.pending-stat .num { color: var(--amber); }
+    .stat-chip.done-stat    .num { color: var(--green); }
+
+    /* ── No Firebase mode ── */
+    .local-banner {
+      background: rgba(245,158,11,.08);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 0.83rem;
+      color: var(--amber);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .header { padding: 12px 14px; }
+      .board  { padding: 14px 14px 40px; }
+      .ticket-grid { grid-template-columns: 1fr; }
+      .filter-tabs { order: 3; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Login overlay ── -->
+  <div class="overlay" id="login-overlay">
+    <div class="login-box">
+      <div>
+        <div class="logo" style="display:inline-block;margin-bottom:12px">SmartServe KOT</div>
+        <h2>Kitchen Display</h2>
+        <p style="margin-top:6px">Sign in with your staff account to view live orders.</p>
+      </div>
+      <form id="kot-login-form">
+        <div class="field">Email<input id="kot-email" type="email" autocomplete="email" required placeholder="staff@restaurant.com" /></div>
+        <div class="field" style="margin-top:8px">Password<input id="kot-password" type="password" autocomplete="current-password" required /></div>
+        <button class="btn-primary" type="submit" id="kot-sign-in-btn" style="margin-top:4px">Sign In</button>
+        <p class="login-msg" id="kot-login-msg">Use your staff credentials.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">KOT</div>
+      <span class="page-title">Kitchen Display</span>
+    </div>
+    <div class="header-right">
+      <span class="live-dot" id="live-dot"></span>
+      <span class="status-text" id="kot-status">Connecting…</span>
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="pending">Pending <span class="badge-count" id="badge-pending">0</span></button>
+        <button class="filter-tab"        data-filter="done">Done <span class="badge-count" id="badge-done" style="background:#166534;color:#86efac">0</span></button>
+        <button class="filter-tab"        data-filter="all">All</button>
+      </div>
+      <button class="btn-sound" id="btn-sound" title="Toggle sound">🔔 Sound</button>
+    </div>
+  </div>
+
+  <!-- ── Board ── -->
+  <div class="board" id="board">
+    <div class="stats-bar" id="stats-bar" style="display:none">
+      <div class="stat-chip pending-stat">
+        <span class="num" id="stat-pending">0</span>
+        <span class="lbl">Pending orders</span>
+      </div>
+      <div class="stat-chip done-stat">
+        <span class="num" id="stat-done">0</span>
+        <span class="lbl">Completed today</span>
+      </div>
+    </div>
+    <div id="local-banner" class="local-banner" style="display:none">
+      ⚠️ <strong>Local mode:</strong> Firebase not configured. KOT requires Firebase to receive live orders. Set up <code>firebase-config.js</code> and refresh.
+    </div>
+    <div class="empty-state" id="empty-state">
+      <div class="icon">🍳</div>
+      <p>Waiting for orders…</p>
+      <small>New orders will appear here in real time</small>
+    </div>
+    <div class="ticket-grid" id="ticket-grid" style="display:none"></div>
+  </div>
+
+  <!-- Notification sound (generated tone) -->
+  <audio id="kot-beep" preload="auto">
+    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVYGAACBiY6TmJqZl5KMhHx0bGVgXVtaWlpbXV9iZmlucHFycXBvbmxqaGZjYF5cW1lYV1ZWVldYWVtcXV9hYmRlZmdoaWlqamppZ2ZlY2JhX15cW1lYVlVUU1NTU1RVVlhZWltcXV5fYGFiY2NkZGVlZWVkY2NiYWBfXl1bWllXVlVUU1NSUlJSU1RVVldYWVlaW1xcXV1eXl9fYGBgYGBgX19eXl1cW1pZWFdWVVRTUlFRUVFRUlNUVVZXWFlaW1tcXV5fYGFiY2NkZGVlZGRjYmFgX15dXFtZWFdWVVRTUlFQUFBQUFBRUlNUVVZXWFlaWlscHR4fICEhIiMjJCQkJCMjIiIhIB8eHRwbGhkYFxYVFBMSERAQDw8PDw8QERITFBUWGB" type="audio/wav" />
+  </audio>
+
+  <script src="firebase-config.js"></script>
+  <script>
+  (function () {
+    const FBV = "10.12.5";
+
+    // ── State ──
+    const tickets   = {};   // kotId → ticket data
+    let   currentFilter = "pending";
+    let   soundEnabled  = true;
+    let   restaurantId  = null;
+
+    // ── Sound ──
+    const soundBtn = document.getElementById("btn-sound");
+    soundBtn.addEventListener("click", function () {
+      soundEnabled = !soundEnabled;
+      soundBtn.classList.toggle("muted-state", !soundEnabled);
+      soundBtn.textContent = soundEnabled ? "🔔 Sound" : "🔕 Sound";
+    });
+
+    function playBeep() {
+      if (!soundEnabled) return;
+      // Generate a short beep via AudioContext
+      try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(660, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.35, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.35);
+      } catch (e) {
+        document.getElementById("kot-beep").play().catch(function(){});
+      }
+    }
+
+    // ── Filter tabs ──
+    document.querySelectorAll(".filter-tab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        currentFilter = btn.dataset.filter;
+        renderTickets();
+      });
+    });
+
+    // ── Status ──
+    function setStatus(text, ok) {
+      document.getElementById("kot-status").textContent = text;
+      document.getElementById("live-dot").style.background = ok ? "var(--green)" : "var(--red)";
+    }
+
+    function loginMsg(text, isError) {
+      const el = document.getElementById("kot-login-msg");
+      el.textContent = text;
+      el.className   = "login-msg" + (isError ? " error" : "");
+    }
+
+    // ── Render ──
+    function elapsedLabel(isoString) {
+      const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
+      if (diff < 60)  return diff + "s ago";
+      if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+      return Math.floor(diff / 3600) + "h ago";
+    }
+
+    function elapsedClass(isoString) {
+      const mins = (Date.now() - new Date(isoString)) / 60000;
+      if (mins >= 15) return "alert";
+      if (mins >= 8)  return "warn";
+      return "";
+    }
+
+    function escH(v) {
+      return String(v || "").replace(/[&<>"']/g, function (c) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+      });
+    }
+
+    function totalQty(items) {
+      return (items || []).reduce(function (s, i) { return s + (i.qty || 1); }, 0);
+    }
+
+    function buildTicketHTML(id, t) {
+      const isDone = t.status === "done";
+      const elCls  = isDone ? "" : elapsedClass(t.createdAt);
+      const elText = elapsedLabel(t.createdAt);
+      const items  = t.items || [];
+      const qty    = totalQty(items);
+
+      return '<div class="ticket ' + (isDone ? "done" : "new-order") + '" id="tkt-' + escH(id) + '">' +
+        '<div class="ticket-head">' +
+          '<div class="table-label">Table ' + escH(String(t.tableId || "").replace(/\D/g, "")) + '</div>' +
+          '<div class="ticket-meta">' +
+            '<span class="ticket-status-badge ' + (isDone ? "done" : "pending") + '">' + (isDone ? "Done" : "Pending") + '</span>' +
+            '<span class="elapsed ' + elCls + '" data-created="' + escH(t.createdAt) + '">' + elText + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ticket-items">' +
+          items.map(function (item) {
+            return '<div class="kot-item">' +
+              '<span class="kot-item-name">' + escH(item.name) + '</span>' +
+              '<span class="kot-item-qty">×' + (item.qty || 1) + '</span>' +
+            '</div>';
+          }).join("") +
+        '</div>' +
+        '<div class="ticket-foot">' +
+          '<span class="item-count">' + qty + ' item' + (qty === 1 ? "" : "s") + '</span>' +
+          (isDone
+            ? '<button class="btn-undo" onclick="undoTicket(\'' + escH(id) + '\')">Undo</button>'
+            : '<button class="btn-done" onclick="markDone(\'' + escH(id) + '\')">✓ Done</button>'
+          ) +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderTickets() {
+      const grid   = document.getElementById("ticket-grid");
+      const empty  = document.getElementById("empty-state");
+      const stats  = document.getElementById("stats-bar");
+
+      const all     = Object.entries(tickets);
+      const pending = all.filter(function (e) { return e[1].status !== "done"; });
+      const done    = all.filter(function (e) { return e[1].status === "done"; });
+
+      // Update counts
+      document.getElementById("stat-pending").textContent  = pending.length;
+      document.getElementById("stat-done").textContent     = done.length;
+      document.getElementById("badge-pending").textContent = pending.length;
+      document.getElementById("badge-done").textContent    = done.length;
+
+      // Filter
+      let visible;
+      if      (currentFilter === "pending") visible = pending;
+      else if (currentFilter === "done")    visible = done;
+      else                                  visible = all;
+
+      // Sort: newest pending first, done at bottom
+      visible.sort(function (a, b) {
+        if (a[1].status === b[1].status) {
+          return new Date(b[1].createdAt) - new Date(a[1].createdAt);
+        }
+        return a[1].status === "done" ? 1 : -1;
+      });
+
+      if (!visible.length) {
+        grid.style.display  = "none";
+        empty.style.display = "";
+        empty.querySelector("p").textContent    = currentFilter === "done" ? "No completed orders yet" : "No pending orders — all clear! 🎉";
+        empty.querySelector("small").textContent = currentFilter === "done" ? "Orders marked done will appear here" : "New tickets will appear the moment customers order";
+        stats.style.display = all.length ? "" : "none";
+        return;
+      }
+
+      grid.style.display  = "";
+      empty.style.display = "none";
+      stats.style.display = "";
+      grid.innerHTML = visible.map(function (e) { return buildTicketHTML(e[0], e[1]); }).join("");
+    }
+
+    // Update elapsed timers every 30s without full re-render
+    setInterval(function () {
+      document.querySelectorAll(".elapsed[data-created]").forEach(function (el) {
+        const created = el.dataset.created;
+        el.textContent = elapsedLabel(created);
+        el.className   = "elapsed " + elapsedClass(created);
+      });
+    }, 30000);
+
+    // ── Firebase integration ──
+    let fsMod, db, kotCol;
+
+    window.markDone = async function (id) {
+      const btn = document.querySelector("#tkt-" + id + " .btn-done");
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      if (tickets[id]) tickets[id].status = "done";
+      renderTickets();
+      if (fsMod && db && restaurantId) {
+        try {
+          await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "done" });
+        } catch (e) { console.error("Mark done failed", e); }
+      }
+    };
+
+    window.undoTicket = async function (id) {
+      if (tickets[id]) tickets[id].status = "pending";
+      renderTickets();
+      if (fsMod && db && restaurantId) {
+        try {
+          await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "pending" });
+        } catch (e) { console.error("Undo failed", e); }
+      }
+    };
+
+    async function startKot(uid) {
+      setStatus("Loading KOT…", true);
+      try {
+        // Resolve restaurantId from staffIndex
+        const idxSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", uid));
+        if (!idxSnap.exists()) { setStatus("No restaurant found", false); return; }
+        restaurantId = idxSnap.data().restaurantId;
+
+        kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
+
+        // Listen to all KOT tickets (today's; limit 100 newest)
+        const q = fsMod.query(kotCol, fsMod.orderBy("createdAt", "desc"), fsMod.limit(100));
+
+        fsMod.onSnapshot(q, function (snap) {
+          const isFirst = Object.keys(tickets).length === 0;
+          let hasNew = false;
+
+          snap.docChanges().forEach(function (change) {
+            const id   = change.doc.id;
+            const data = change.doc.data();
+            if (change.type === "added") {
+              tickets[id] = data;
+              if (!isFirst && data.status !== "done") hasNew = true;
+            } else if (change.type === "modified") {
+              tickets[id] = data;
+            } else if (change.type === "removed") {
+              delete tickets[id];
+            }
+          });
+
+          if (hasNew) playBeep();
+          renderTickets();
+          setStatus("Live · " + restaurantId, true);
+          document.getElementById("login-overlay").classList.add("hidden");
+          document.getElementById("stats-bar").style.display = "";
+        }, function (e) {
+          console.error("KOT snapshot failed", e);
+          setStatus("Sync error", false);
+        });
+
+      } catch (e) {
+        console.error("KOT start failed", e);
+        setStatus("Error: " + e.message, false);
+      }
+    }
+
+    async function bootFirebase() {
+      if (!window.SMARTSERVE_FIREBASE_CONFIG || !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
+          window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
+        // No Firebase — show local banner, skip login
+        document.getElementById("local-banner").style.display = "";
+        document.getElementById("login-overlay").classList.add("hidden");
+        setStatus("Local prototype", false);
+        return;
+      }
+
+      loginMsg("Connecting to Firebase…");
+      try {
+        const [appM, authM, fsM] = await Promise.all([
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-app.js"),
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-auth.js"),
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-firestore.js"),
+        ]);
+
+        fsMod = fsM;
+
+        let app;
+        try { app = appM.getApp("kot"); }
+        catch { app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "kot"); }
+
+        const auth = authM.getAuth(app);
+        db = fsM.getFirestore(app);
+
+        loginMsg("Ready. Sign in to start.");
+
+        // Auth state
+        authM.onAuthStateChanged(auth, function (user) {
+          if (user) {
+            startKot(user.uid);
+          } else {
+            document.getElementById("login-overlay").classList.remove("hidden");
+            loginMsg("Use your staff credentials.");
+          }
+        });
+
+        // Login form
+        document.getElementById("kot-login-form").addEventListener("submit", async function (e) {
+          e.preventDefault();
+          const email = document.getElementById("kot-email").value.trim();
+          const pass  = document.getElementById("kot-password").value;
+          loginMsg("Signing in…");
+          document.getElementById("kot-sign-in-btn").disabled = true;
+          try {
+            await authM.signInWithEmailAndPassword(auth, email, pass);
+          } catch (err) {
+            const msgs = {
+              "auth/invalid-credential": "Invalid email or password.",
+              "auth/user-not-found":     "No account found.",
+              "auth/wrong-password":     "Wrong password.",
+            };
+            loginMsg(msgs[err.code] || err.message, true);
+            document.getElementById("kot-sign-in-btn").disabled = false;
+          }
+        });
+
+      } catch (e) {
+        console.error("KOT Firebase boot failed", e);
+        loginMsg("Firebase connection failed. Check firebase-config.js.", true);
+        setStatus("Setup failed", false);
+      }
+    }
+
+    // Initial render
+    renderTickets();
+    bootFirebase();
+  })();
+  </script>
+
+</body>
+</html>
