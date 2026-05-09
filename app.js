@@ -707,12 +707,17 @@ async function loadDashboardState(fsMod, db) {
       if (billRequested) {
         state.sessions[tableId].status        = "active";
         state.sessions[tableId].billRequested = true;
-      } else if (items && items.length) {
+     } else if (items && items.length) {
         const session = state.sessions[tableId];
         session.status        = "active";
         session.billRequested = false;
         session.orders.push({ id: "ORD-" + (session.orders.length + 1), createdAt: new Date(), items: items });
         showNotification(tableId, items.reduce(function(s, item) { return s + item.qty; }, 0));
+        // ── KOT: push to kitchen queue ──
+        fsMod.setDoc(
+          fsMod.doc(db, "restaurants", restaurantId, "kot", change.doc.id),
+          { tableId: tableId, items: items, createdAt: new Date().toISOString(), status: "pending" }
+        ).catch(function(e) { console.error("KOT write failed", e); });
       }
       try { await fsMod.updateDoc(change.doc.ref, { status: "processed" }); }
       catch (e) { console.error("Could not mark processed", e); }
