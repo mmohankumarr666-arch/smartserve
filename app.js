@@ -519,7 +519,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   document.body.classList.add("auth-locked");
 
-  // Tab switching handled inline in index.html
+  // Tab switching
+  document.querySelector("#tab-login").addEventListener("click", function() {
+    document.querySelector("#tab-login").classList.add("active");
+    document.querySelector("#tab-register").classList.remove("active");
+    document.querySelector("#login-form").classList.remove("hidden");
+    document.querySelector("#register-form").classList.add("hidden");
+  });
+  document.querySelector("#tab-register").addEventListener("click", function() {
+    document.querySelector("#tab-register").classList.add("active");
+    document.querySelector("#tab-login").classList.remove("active");
+    document.querySelector("#register-form").classList.remove("hidden");
+    document.querySelector("#login-form").classList.add("hidden");
+  });
 
   // Login submit
   document.querySelector("#login-form").addEventListener("submit", async function(e) {
@@ -554,13 +566,16 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!restaurantName || !ownerName) { updateRegisterMessage("Please fill in all fields.", true); return; }
 
     const newRestaurantId = slugify(restaurantName);
-    updateRegisterMessage("Creating account...");
+    updateRegisterMessage("Creating account... redirecting to sign in.");
     try {
       const cred = await sync.authModule.createUserWithEmailAndPassword(sync.auth, email, password);
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
         { role: "owner", name: ownerName, email: email, restaurantId: newRestaurantId, createdAt: new Date().toISOString() }
       );
+      // Sign out BEFORE redirecting so onAuthStateChanged doesn't fire
+      // with the old restaurantId ("demo-restaurant") and wrongly reject the user.
+      await sync.authModule.signOut(sync.auth);
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set("restaurant", newRestaurantId);
       window.location.href = newUrl.href;
