@@ -519,19 +519,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   document.body.classList.add("auth-locked");
 
-  // Tab switching
-  document.querySelector("#tab-login").addEventListener("click", function() {
-    document.querySelector("#tab-login").classList.add("active");
-    document.querySelector("#tab-register").classList.remove("active");
-    document.querySelector("#login-form").classList.remove("hidden");
-    document.querySelector("#register-form").classList.add("hidden");
-  });
-  document.querySelector("#tab-register").addEventListener("click", function() {
-    document.querySelector("#tab-register").classList.add("active");
-    document.querySelector("#tab-login").classList.remove("active");
-    document.querySelector("#register-form").classList.remove("hidden");
-    document.querySelector("#login-form").classList.add("hidden");
-  });
+  // Tab switching handled inline in index.html
 
   // Login submit
   document.querySelector("#login-form").addEventListener("submit", async function(e) {
