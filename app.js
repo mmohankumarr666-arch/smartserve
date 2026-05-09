@@ -15,7 +15,7 @@ const menu = [
   { id: "brownie",        name: "Sizzling Brownie",   desc: "Chocolate brownie, vanilla scoop",           price: 190, category: "dessert", available: true },
 ];
 
-// ─── Pure helpers (defined before any calls) ──────────────────────────────────
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 function slugify(value) {
   const slug = String(value).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   return slug || "demo-restaurant";
@@ -66,7 +66,8 @@ function totals(lines) {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const params          = new URLSearchParams(window.location.search);
-const restaurantId    = resolveRestaurantId();
+// restaurantId is a let — it will be overwritten after login using the staff doc
+let restaurantId      = resolveRestaurantId();
 const initialTableIds = ["T1", "T2", "T3", "T4"];
 
 function createSession(tableId) {
@@ -492,12 +493,13 @@ async function connectFirebase() {
     sync.firestoreModule = fsMod;
     sync.db              = db;
     sync.setDoc          = fsMod.setDoc;
-    sync.stateDoc        = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
+    // stateDoc is set later, once we know the correct restaurantId from the staff doc
 
     updateLoginMessage("Ready. Please sign in.");
 
     authMod.onAuthStateChanged(auth, async function(user) {
       if (sync.pendingRegistration) return;
+
       if (!user) {
         document.body.classList.add("auth-locked");
         document.body.classList.remove("auth-ready");
@@ -505,28 +507,88 @@ async function connectFirebase() {
         updateSyncStatus("Signed out");
         return;
       }
-      const staffSnap = await fsMod.getDoc(fsMod.doc(db, "restaurants", restaurantId, "staff", user.uid));
-      if (!staffSnap.exists()) {
-        await authMod.signOut(auth);
-        updateLoginMessage("This account has no access to this restaurant.", true);
-        return;
+
+      try {
+        // ── STEP 1: Resolve restaurantId from staffIndex (fast) ───────────────
+        // staffIndex/{uid} stores { restaurantId } so we never have to guess.
+        let resolvedRestaurantId = null;
+        let staffDocExists = false;
+
+        const indexSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", user.uid));
+        if (indexSnap.exists()) {
+          resolvedRestaurantId = indexSnap.data().restaurantId;
+          // Verify the actual staff doc still exists
+          const staffSnap = await fsMod.getDoc(
+            fsMod.doc(db, "restaurants", resolvedRestaurantId, "staff", user.uid)
+          );
+          staffDocExists = staffSnap.exists();
+          if (staffDocExists && staffSnap.data().restaurantId) {
+            // Trust the value stored in the staff doc itself (most authoritative)
+            resolvedRestaurantId = staffSnap.data().restaurantId;
+          }
+        }
+
+        // ── STEP 2: Fallback — try the URL param restaurant if provided ───────
+        if (!staffDocExists) {
+          const urlRestaurantId = resolveRestaurantId();
+          if (urlRestaurantId && urlRestaurantId !== "demo-restaurant") {
+            const staffSnap = await fsMod.getDoc(
+              fsMod.doc(db, "restaurants", urlRestaurantId, "staff", user.uid)
+            );
+            if (staffSnap.exists()) {
+              resolvedRestaurantId = staffSnap.data().restaurantId || urlRestaurantId;
+              staffDocExists = true;
+              // Backfill the staffIndex so future logins are fast
+              await fsMod.setDoc(
+                fsMod.doc(db, "staffIndex", user.uid),
+                { restaurantId: resolvedRestaurantId, email: user.email, createdAt: new Date().toISOString() },
+                { merge: true }
+              );
+            }
+          }
+        }
+
+        if (!resolvedRestaurantId || !staffDocExists) {
+          await authMod.signOut(auth);
+          updateLoginMessage(
+            "No restaurant found for this account. Contact support on WhatsApp: 8610741387",
+            true
+          );
+          return;
+        }
+
+        // ── STEP 3: Subscription check ────────────────────────────────────────
+        const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", resolvedRestaurantId));
+        if (!subSnap.exists()) {
+          await authMod.signOut(auth);
+          updateLoginMessage("No subscription found. Please complete payment to activate your account.", true);
+          return;
+        }
+        const sub = subSnap.data();
+        if (sub.status !== "active" || new Date(sub.expiryDate) < new Date()) {
+          await authMod.signOut(auth);
+          updateLoginMessage("Your account is pending activation. Please contact us on WhatsApp: 8610741387", true);
+          return;
+        }
+
+        // ── STEP 4: All good — wire up the live restaurantId ──────────────────
+        restaurantId  = resolvedRestaurantId;
+        sync.stateDoc = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
+
+        // Update the URL so bookmarking and page refresh work
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set("restaurant", restaurantId);
+        window.history.replaceState({}, "", newUrl.toString());
+
+        document.body.classList.remove("auth-locked");
+        document.body.classList.add("auth-ready");
+        await loadDashboardState(fsMod, db);
+
+      } catch (e) {
+        console.error("Auth check failed", e);
+        updateLoginMessage("Sign-in check failed. Please try again.", true);
+        await authMod.signOut(auth).catch(function() {});
       }
-      // ── Subscription check ──────────────────────────────────────────────────
-      const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", restaurantId));
-      if (!subSnap.exists()) {
-        await authMod.signOut(auth);
-        updateLoginMessage("No subscription found. Please complete payment to activate your account.", true);
-        return;
-      }
-      const sub = subSnap.data();
-      if (sub.status !== "active" || new Date(sub.expiryDate) < new Date()) {
-        await authMod.signOut(auth);
-        updateLoginMessage("Your account is pending activation. Please contact us on WhatsApp: 8610741387", true);
-        return;
-      }
-      document.body.classList.remove("auth-locked");
-      document.body.classList.add("auth-ready");
-      await loadDashboardState(fsMod, db);
     });
 
   } catch (e) {
@@ -619,7 +681,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // ─── Register submit → create account then redirect to WhatsApp ───────────
+  // ─── Register submit ───────────────────────────────────────────────────────
   document.querySelector("#register-form").addEventListener("submit", async function(e) {
     e.preventDefault();
     if (!sync.auth || !sync.authModule || !sync.firestoreModule || !sync.db) {
@@ -640,17 +702,30 @@ document.addEventListener("DOMContentLoaded", function() {
     updateRegisterMessage("Creating your account...");
 
     try {
-      // Set flag BEFORE createUser so onAuthStateChanged ignores the auto sign-in
       sync.pendingRegistration = true;
       const cred = await sync.authModule.createUserWithEmailAndPassword(sync.auth, email, password);
 
-      // Write staff/owner doc
+      const staffDocData = {
+        role:         "owner",
+        name:         ownerName,
+        email:        email,
+        restaurantId: newRestaurantId,
+        createdAt:    new Date().toISOString(),
+      };
+
+      // Write staff doc under the restaurant
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
-        { role: "owner", name: ownerName, email: email, restaurantId: newRestaurantId, createdAt: new Date().toISOString() }
+        staffDocData
       );
 
-      // Write subscription doc with status "pending" — admin must activate it
+      // Write top-level staffIndex for fast uid → restaurantId lookup at login
+      await sync.firestoreModule.setDoc(
+        sync.firestoreModule.doc(sync.db, "staffIndex", cred.user.uid),
+        { restaurantId: newRestaurantId, email: email, createdAt: new Date().toISOString() }
+      );
+
+      // Write subscription doc (status: "pending" until admin activates)
       await sync.firestoreModule.setDoc(
         sync.firestoreModule.doc(sync.db, "subscriptions", newRestaurantId),
         {
@@ -660,21 +735,20 @@ document.addEventListener("DOMContentLoaded", function() {
           ownerEmail:     email,
           plan:           plan,
           startDate:      new Date().toISOString(),
-          expiryDate:     new Date().toISOString(), // admin will set real expiry on activation
+          expiryDate:     new Date().toISOString(),
           status:         "pending",
           createdAt:      new Date().toISOString(),
         }
       );
 
-      // Sign out cleanly before redirect
       await sync.authModule.signOut(sync.auth);
       sync.pendingRegistration = false;
 
-      // Build WhatsApp message with all details
       const planLabel = plan === "yearly" ? "Yearly — ₹4,999/year" : "Monthly — ₹499/month";
       const waMessage = encodeURIComponent(
         "Hi! I just registered on SmartServe.\n\n" +
         "Restaurant: " + restaurantName + "\n" +
+        "Restaurant ID: " + newRestaurantId + "\n" +
         "Owner: " + ownerName + "\n" +
         "Email: " + email + "\n" +
         "Plan: " + planLabel + "\n\n" +
@@ -683,13 +757,13 @@ document.addEventListener("DOMContentLoaded", function() {
       const waUrl = "https://wa.me/918610741387?text=" + waMessage;
 
       updateRegisterMessage("Account created! Redirecting to WhatsApp...");
-
-      // Small delay so the user sees the message, then open WhatsApp
       setTimeout(function () {
         window.open(waUrl, "_blank");
-        // Show sign-in tab with a helpful message
         document.querySelector("#tab-login").click();
-        updateLoginMessage("Account created! After payment is confirmed, you will be activated and can sign in here.", false);
+        updateLoginMessage(
+          "Account created! After payment is confirmed, sign in here. Your Restaurant ID: " + newRestaurantId,
+          false
+        );
       }, 1200);
 
     } catch (err) {
