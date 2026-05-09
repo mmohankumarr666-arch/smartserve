@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartServe — Sales Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --surface-2: #f9f8f5;
+      --border: #e4e2da;
+      --border-strong: #c8c5bb;
+      --text: #1a1a1a;
+      --muted: #7a7670;
+      --light: #b0aca4;
+      --green: #1e8a4a;
+      --green-bg: #edf7f1;
+      --red: #c0392b;
+      --red-bg: #fef2f2;
+      --amber: #b45309;
+      --amber-bg: #fef3c7;
+      --accent: #e8572a;
+      --mono: 'DM Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100%; -webkit-font-smoothing: antialiased; }
+    img  { display: block; max-width: 100%; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select { font-family: inherit; }
+    .hidden { display: none !important; }
+
+    /* ── Login overlay ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 20px;
+    }
+    .login-box {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 32px 28px;
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.12);
+    }
+    .eyebrow { font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: .2rem; }
+    .login-box h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; }
+    .field { display: flex; flex-direction: column; gap: 5px; font-size: .78rem; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+    .field input {
+      padding: 10px 12px;
+      background: var(--surface-2); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text); font-size: .95rem; font-family: var(--sans); outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--text); background: var(--surface); }
+    .btn-primary {
+      padding: 11px 20px; background: var(--text); color: #fff; border: none;
+      border-radius: var(--radius-sm); font-size: .9rem; font-weight: 600; transition: opacity .15s;
+    }
+    .btn-primary:hover { opacity: .82; }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+    .login-msg { font-size: .8rem; color: var(--muted); min-height: 1.2em; }
+    .login-msg.error { color: var(--red); }
+
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.1rem 1.5rem; background: var(--surface);
+      border-bottom: 1.5px solid var(--border);
+      position: sticky; top: 0; z-index: 40; gap: 12px; flex-wrap: wrap;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .logo-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    .header-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .date-input {
+      padding: 7px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface-2); font-size: .85rem; font-family: var(--mono);
+      color: var(--text); outline: none; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .date-input:focus { border-color: var(--text); }
+
+    .btn-secondary {
+      padding: 7px 16px; background: transparent; border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-sm); font-size: .85rem; font-weight: 500;
+      transition: background .15s;
+    }
+    .btn-secondary:hover { background: var(--surface-2); }
+
+    .btn-print {
+      padding: 7px 16px; background: var(--text); color: #fff; border: none;
+      border-radius: var(--radius-sm); font-size: .85rem; font-weight: 600;
+      transition: opacity .15s;
+    }
+    .btn-print:hover { opacity: .82; }
+
+    /* ── Shell ── */
+    .shell { max-width: 960px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; }
+
+    /* ── Date label ── */
+    .report-date-label {
+      font-size: .78rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); margin-bottom: 1.25rem;
+      font-family: var(--mono);
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .85rem; margin-bottom: 1.25rem;
+    }
+    .stat-card {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 1.1rem 1.25rem;
+    }
+    .stat-card .lbl { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: .35rem; }
+    .stat-card .val { font-size: 1.6rem; font-weight: 700; font-family: var(--mono); letter-spacing: -.03em; }
+    .stat-card .sub { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+    .stat-card.green .val { color: var(--green); }
+    .stat-card.red   .val { color: var(--red); }
+    .stat-card.amber .val { color: var(--amber); }
+
+    /* ── Two-column layout ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem;
+    }
+    .card-title {
+      font-size: .85rem; font-weight: 700; margin-bottom: 1rem;
+      text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+    }
+
+    /* ── P&L table ── */
+    .pnl-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .4rem 0; border-bottom: 1px solid var(--border);
+      font-size: .875rem;
+    }
+    .pnl-row:last-child { border-bottom: none; }
+    .pnl-row .label { color: var(--text); }
+    .pnl-row .amt { font-family: var(--mono); font-weight: 600; }
+    .pnl-row.muted .label,
+    .pnl-row.muted .amt { color: var(--muted); font-size: .82rem; }
+    .pnl-row.section-head { margin-top: .6rem; }
+    .pnl-row.section-head .label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--light); }
+    .pnl-sep { border-top: 2px solid var(--border); margin: .5rem 0; }
+    .pnl-row.total .label { font-weight: 700; }
+    .pnl-row.total .amt   { font-weight: 700; font-size: 1rem; }
+    .pnl-row.profit .amt  { color: var(--green); }
+    .pnl-row.loss   .amt  { color: var(--red); }
+
+    /* ── Profit estimator ── */
+    .estimator-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .estimator-row label { font-size: .82rem; font-weight: 600; color: var(--muted); }
+    .slider-wrap { display: flex; align-items: center; gap: 10px; }
+    .slider-wrap input[type=range] { width: 120px; accent-color: var(--text); cursor: pointer; }
+    .slider-val {
+      font-family: var(--mono); font-size: .85rem; font-weight: 600;
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 3px 8px; border-radius: 5px; min-width: 42px; text-align: center;
+    }
+    .expense-input {
+      padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      font-size: .85rem; font-family: var(--mono); background: var(--surface-2);
+      width: 120px; outline: none; transition: border-color .15s;
+    }
+    .expense-input:focus { border-color: var(--text); }
+
+    /* ── Hourly chart ── */
+    .chart-wrap { overflow-x: auto; }
+    .bar-chart {
+      display: flex; align-items: flex-end; gap: 6px;
+      height: 120px; padding-bottom: 28px; min-width: 400px;
+      position: relative;
+    }
+    .bar-chart::after {
+      content: ''; position: absolute; bottom: 28px; left: 0; right: 0;
+      border-top: 1px dashed var(--border);
+    }
+    .bar-col { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 4px; }
+    .bar {
+      width: 100%; background: var(--accent); border-radius: 4px 4px 0 0;
+      min-height: 2px; transition: height .3s ease;
+      position: relative;
+    }
+    .bar:hover::before {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 6px); left: 50%;
+      transform: translateX(-50%);
+      background: var(--text); color: #fff;
+      font-size: .68rem; font-weight: 600; font-family: var(--mono);
+      padding: 3px 7px; border-radius: 4px; white-space: nowrap;
+      pointer-events: none;
+    }
+    .bar-lbl { font-size: .62rem; font-family: var(--mono); color: var(--muted); margin-top: 4px; }
+    .bar-zero { background: var(--border); }
+
+    /* ── Invoice list ── */
+    .inv-list { display: flex; flex-direction: column; gap: .5rem; }
+    .inv-item {
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      overflow: hidden; background: var(--surface-2);
+    }
+    .inv-summary {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .75rem 1rem; cursor: pointer; gap: 1rem;
+      transition: background .12s;
+    }
+    .inv-summary:hover { background: #f1f0ec; }
+    .inv-summary-left { display: flex; flex-direction: column; gap: .15rem; }
+    .inv-summary-left strong { font-size: .88rem; font-weight: 700; font-family: var(--mono); }
+    .inv-meta { font-size: .75rem; color: var(--muted); }
+    .inv-summary-right { display: flex; align-items: center; gap: .6rem; flex-shrink: 0; }
+    .inv-summary-right strong { font-family: var(--mono); font-size: .95rem; font-weight: 700; }
+    .inv-chevron { color: var(--muted); font-size: .85rem; transition: transform .2s; }
+    .inv-item.expanded .inv-chevron { transform: rotate(180deg); }
+    .inv-detail { display: none; padding: .75rem 1rem 1rem; border-top: 1px solid var(--border); }
+    .inv-item.expanded .inv-detail { display: block; }
+    .inv-line { display: flex; justify-content: space-between; font-size: .83rem; padding: .22rem 0; }
+    .inv-line.muted { color: var(--muted); font-size: .78rem; }
+    .inv-line.grand { font-weight: 700; font-size: .92rem; padding-top: .35rem; margin-top: .2rem; border-top: 2px solid var(--border); }
+    .inv-sep { border-top: 1px dashed var(--border); margin: .4rem 0; }
+
+    /* ── Empty ── */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }
+    .empty-state .icon { font-size: 2rem; margin-bottom: 10px; opacity: .5; }
+    .empty-state p { font-size: .9rem; font-weight: 500; }
+
+    /* ── Print ── */
+    @media print {
+      .header .header-right, .overlay { display: none !important; }
+      body { background: #fff; }
+      .card, .stat-card { box-shadow: none; break-inside: avoid; }
+      .shell { padding: 0; max-width: 100%; }
+    }
+
+    @media (max-width: 600px) {
+      .header { padding: .9rem 1rem; }
+      .shell  { padding: 1rem 1rem 3rem; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Login overlay ── -->
+  <div class="overlay" id="overlay">
+    <div class="login-box">
+      <div>
+        <p class="eyebrow">SmartServe</p>
+        <h2>Sales Report</h2>
+        <p style="font-size:.83rem;color:var(--muted);margin-top:6px">Sign in to view your restaurant's financials.</p>
+      </div>
+      <form id="login-form">
+        <div class="field">Email<input id="sr-email" type="email" autocomplete="email" required /></div>
+        <div class="field" style="margin-top:8px">Password<input id="sr-password" type="password" autocomplete="current-password" required /></div>
+        <button class="btn-primary" type="submit" id="sr-signin-btn" style="margin-top:4px">Sign In</button>
+        <p class="login-msg" id="login-msg">Use your staff credentials.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Header ── -->
+  <div class="header" id="main-header">
+    <div class="header-left">
+      <span class="logo-label">SmartServe</span>
+      <span class="header-title">Sales Report</span>
+      <span id="restaurant-label" style="font-size:.78rem;color:var(--muted);font-family:var(--mono)"></span>
+    </div>
+    <div class="header-right">
+      <input type="date" class="date-input" id="date-picker" />
+      <button class="btn-secondary" id="btn-today">Today</button>
+      <button class="btn-print" onclick="window.print()">🖨 Print</button>
+      <button class="btn-secondary" onclick="window.close()">✕ Close</button>
+    </div>
+  </div>
+
+  <!-- ── Report body ── -->
+  <div class="shell" id="report-body">
+    <div class="report-date-label" id="date-label">Loading…</div>
+
+    <!-- Stats row -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card green">
+        <div class="lbl">Total Revenue</div>
+        <div class="val" id="stat-revenue">₹0</div>
+        <div class="sub" id="stat-revenue-sub">Incl. service charge</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Tables Closed</div>
+        <div class="val" id="stat-orders">0</div>
+        <div class="sub">Bills generated</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Items Sold</div>
+        <div class="val" id="stat-items">0</div>
+        <div class="sub">Across all orders</div>
+      </div>
+      <div class="stat-card amber">
+        <div class="lbl">Avg Order Value</div>
+        <div class="val" id="stat-avg">₹0</div>
+        <div class="sub">Per table</div>
+      </div>
+    </div>
+
+    <!-- P&L + Estimator -->
+    <div class="two-col">
+
+      <!-- Revenue Breakdown -->
+      <div class="card">
+        <div class="card-title">Revenue Breakdown</div>
+        <div class="pnl-row section-head"><span class="label">Income</span></div>
+        <div class="pnl-row"><span class="label">Food & Beverage Sales</span><span class="amt" id="pnl-subtotal">₹0</span></div>
+        <div class="pnl-row"><span class="label">Service Charge (4%)</span><span class="amt" id="pnl-service">₹0</span></div>
+        <div class="pnl-sep"></div>
+        <div class="pnl-row total"><span class="label">Gross Revenue</span><span class="amt" id="pnl-gross">₹0</span></div>
+        <div class="pnl-row muted"><span class="label">GST Collected (5%)</span><span class="amt" id="pnl-gst">₹0</span></div>
+        <div class="pnl-row muted"><span class="label">(Payable to govt — not your income)</span><span class="amt"></span></div>
+        <div class="pnl-sep"></div>
+        <div class="pnl-row total green"><span class="label">Net Revenue (yours)</span><span class="amt green" id="pnl-net" style="color:var(--green)">₹0</span></div>
+      </div>
+
+      <!-- Profit Estimator -->
+      <div class="card">
+        <div class="card-title">Profit Estimator</div>
+
+        <div class="estimator-row">
+          <label>Food Cost %</label>
+          <div class="slider-wrap">
+            <input type="range" id="food-cost-slider" min="10" max="60" value="30" step="1" />
+            <span class="slider-val" id="food-cost-val">30%</span>
+          </div>
+        </div>
+
+        <div class="estimator-row">
+          <label>Other Expenses (₹)</label>
+          <input type="number" class="expense-input" id="other-expenses" placeholder="0" min="0" />
+        </div>
+
+        <div class="pnl-sep"></div>
+        <div class="pnl-row"><span class="label">Net Revenue</span><span class="amt" id="est-revenue">₹0</span></div>
+        <div class="pnl-row muted"><span class="label">Food Cost Estimate</span><span class="amt" id="est-food-cost" style="color:var(--red)">−₹0</span></div>
+        <div class="pnl-row muted"><span class="label">Other Expenses</span><span class="amt" id="est-other" style="color:var(--red)">−₹0</span></div>
+        <div class="pnl-sep"></div>
+        <div class="pnl-row total" id="profit-row">
+          <span class="label" id="profit-label">Estimated Profit</span>
+          <span class="amt" id="est-profit">₹0</span>
+        </div>
+        <div class="pnl-row muted">
+          <span class="label">Profit Margin</span>
+          <span class="amt" id="est-margin" style="font-size:1rem;font-weight:700">0%</span>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.5">
+          * Estimate only. Actual profit depends on real food costs, staff salaries, rent, and other overheads.
+        </p>
+      </div>
+    </div>
+
+    <!-- Hourly Chart -->
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-title">Sales by Hour</div>
+      <div class="chart-wrap">
+        <div class="bar-chart" id="bar-chart"></div>
+      </div>
+    </div>
+
+    <!-- Top items -->
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-title">Top Items Today</div>
+      <div id="top-items-list"></div>
+    </div>
+
+    <!-- Invoice list -->
+    <div class="card">
+      <div class="card-title">Invoices — <span id="inv-count-label">0 bills</span></div>
+      <div id="inv-list" class="inv-list">
+        <div class="empty-state"><div class="icon">🧾</div><p>No invoices for this date.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script>
+  (function () {
+    const FBV = "10.12.5";
+    let invoices = [];
+    let netRevenue = 0;
+
+    // ── Helpers ──
+    function money(v) { return "₹" + Math.round(v).toLocaleString("en-IN"); }
+    function escH(v)  { return String(v||"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function toDateStr(d) {
+      const dt = (d instanceof Date) ? d : new Date(d);
+      return dt.toISOString().split("T")[0];
+    }
+    function todayStr() { return toDateStr(new Date()); }
+    function formatDate(str) {
+      const d = new Date(str + "T00:00:00");
+      return d.toLocaleDateString("en-IN", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+    }
+
+    // ── Date picker ──
+    const picker = document.getElementById("date-picker");
+    picker.value = todayStr();
+    picker.addEventListener("change", render);
+    document.getElementById("btn-today").addEventListener("click", function () {
+      picker.value = todayStr(); render();
+    });
+
+    // ── Slider + expenses ──
+    const slider       = document.getElementById("food-cost-slider");
+    const sliderVal    = document.getElementById("food-cost-val");
+    const otherExpenses = document.getElementById("other-expenses");
+
+    slider.addEventListener("input", function () {
+      sliderVal.textContent = slider.value + "%";
+      updateEstimator();
+    });
+    otherExpenses.addEventListener("input", updateEstimator);
+
+    function updateEstimator() {
+      const foodPct = Number(slider.value) / 100;
+      const other   = Math.max(0, Number(otherExpenses.value) || 0);
+      const subtotal = invoices
+        .filter(inv => toDateStr(inv.closedAt) === picker.value)
+        .reduce((s, inv) => s + (inv.subtotal || 0), 0);
+
+      const foodCost  = subtotal * foodPct;
+      const profit    = netRevenue - foodCost - other;
+      const margin    = netRevenue > 0 ? (profit / netRevenue * 100) : 0;
+
+      document.getElementById("est-revenue").textContent   = money(netRevenue);
+      document.getElementById("est-food-cost").textContent = "−" + money(foodCost);
+      document.getElementById("est-other").textContent     = "−" + money(other);
+      document.getElementById("est-profit").textContent    = money(Math.abs(profit));
+      document.getElementById("est-margin").textContent    = margin.toFixed(1) + "%";
+
+      const profitRow = document.getElementById("profit-row");
+      const profitLabel = document.getElementById("profit-label");
+      const profitAmt   = document.getElementById("est-profit");
+
+      if (profit >= 0) {
+        profitLabel.textContent = "Estimated Profit";
+        profitAmt.style.color   = "var(--green)";
+        profitRow.classList.remove("loss");
+        document.getElementById("est-margin").style.color = "var(--green)";
+      } else {
+        profitLabel.textContent = "Estimated Loss";
+        profitAmt.style.color   = "var(--red)";
+        profitRow.classList.add("loss");
+        document.getElementById("est-margin").style.color = "var(--red)";
+      }
+    }
+
+    // ── Main render ──
+    function render() {
+      const dateStr = picker.value;
+      document.getElementById("date-label").textContent = formatDate(dateStr);
+
+      const day = invoices.filter(inv => toDateStr(inv.closedAt) === dateStr);
+
+      // Stats
+      const totalRevenue = day.reduce((s, inv) => s + (inv.total    || 0), 0);
+      const totalSubtotal = day.reduce((s, inv) => s + (inv.subtotal || 0), 0);
+      const totalService  = day.reduce((s, inv) => s + (inv.service  || 0), 0);
+      const totalTax      = day.reduce((s, inv) => s + (inv.tax      || 0), 0);
+      const totalItems    = day.reduce((s, inv) => s + (inv.itemCount || 0), 0);
+      const grossRevenue  = totalSubtotal + totalService;
+      netRevenue          = grossRevenue; // GST not ours
+
+      document.getElementById("stat-revenue").textContent = money(totalRevenue);
+      document.getElementById("stat-orders").textContent  = day.length;
+      document.getElementById("stat-items").textContent   = totalItems;
+      document.getElementById("stat-avg").textContent     = day.length ? money(totalRevenue / day.length) : "₹0";
+
+      // P&L
+      document.getElementById("pnl-subtotal").textContent = money(totalSubtotal);
+      document.getElementById("pnl-service").textContent  = money(totalService);
+      document.getElementById("pnl-gross").textContent    = money(grossRevenue);
+      document.getElementById("pnl-gst").textContent      = money(totalTax);
+      document.getElementById("pnl-net").textContent      = money(netRevenue);
+
+      updateEstimator();
+      renderChart(day);
+      renderTopItems(day);
+      renderInvoices(day);
+    }
+
+    function renderChart(day) {
+      const hourly = Array(24).fill(0);
+      day.forEach(function (inv) {
+        const h = new Date(inv.closedAt).getHours();
+        hourly[h] += (inv.total || 0);
+      });
+
+      const max    = Math.max(...hourly, 1);
+      const active = hourly.map((v, i) => i >= 6 && i <= 23 ? { h: i, v } : null).filter(Boolean);
+      const chart  = document.getElementById("bar-chart");
+
+      chart.innerHTML = active.map(function ({ h, v }) {
+        const pct   = Math.round((v / max) * 92);
+        const label = h === 0 ? "12a" : h < 12 ? h+"a" : h === 12 ? "12p" : (h-12)+"p";
+        return '<div class="bar-col">' +
+          '<div class="bar' + (v === 0 ? " bar-zero" : "") + '" style="height:' + (pct||2) + 'px" data-tip="' + (v>0?money(v):"") + '"></div>' +
+          '<span class="bar-lbl">' + label + '</span>' +
+        '</div>';
+      }).join("");
+    }
+
+    function renderTopItems(day) {
+      const totals = {};
+      day.forEach(function (inv) {
+        (inv.lines || []).forEach(function (l) {
+          if (!totals[l.name]) totals[l.name] = { qty: 0, revenue: 0 };
+          totals[l.name].qty     += l.qty || 0;
+          totals[l.name].revenue += (l.qty || 0) * (l.price || 0);
+        });
+      });
+
+      const sorted = Object.entries(totals).sort((a, b) => b[1].qty - a[1].qty).slice(0, 6);
+      const el     = document.getElementById("top-items-list");
+
+      if (!sorted.length) {
+        el.innerHTML = '<p style="font-size:.83rem;color:var(--muted)">No items sold on this date.</p>';
+        return;
+      }
+
+      const maxQty = sorted[0][1].qty;
+      el.innerHTML = sorted.map(function ([name, data]) {
+        const pct = Math.round((data.qty / maxQty) * 100);
+        return '<div style="margin-bottom:.7rem">' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem">' +
+            '<span style="font-size:.88rem;font-weight:600">' + escH(name) + '</span>' +
+            '<span style="font-size:.82rem;color:var(--muted);font-family:var(--mono)">' + data.qty + ' sold · ' + money(data.revenue) + '</span>' +
+          '</div>' +
+          '<div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden">' +
+            '<div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:4px;transition:width .4s ease"></div>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    function renderInvoices(day) {
+      const el  = document.getElementById("inv-list");
+      const lbl = document.getElementById("inv-count-label");
+      lbl.textContent = day.length + " bill" + (day.length === 1 ? "" : "s");
+
+      if (!day.length) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">🧾</div><p>No invoices for this date.</p></div>';
+        return;
+      }
+
+      const sorted = day.slice().sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
+
+      el.innerHTML = sorted.map(function (inv) {
+        const time    = new Date(inv.closedAt).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
+        const hasLines = Array.isArray(inv.lines) && inv.lines.length;
+        const lineRows = hasLines ? inv.lines.map(l =>
+          '<div class="inv-line"><span>' + escH(l.name) + ' ×' + l.qty + '</span><span style="font-family:var(--mono)">' + money(l.price * l.qty) + '</span></div>'
+        ).join("") : "";
+
+        return '<div class="inv-item" onclick="this.classList.toggle(\'expanded\')">' +
+          '<div class="inv-summary">' +
+            '<div class="inv-summary-left">' +
+              '<strong>' + escH(inv.id) + '</strong>' +
+              '<span class="inv-meta">Table ' + escH(String(inv.tableId||"").replace(/\D/g,"")) + ' · ' + (inv.itemCount||0) + ' items · ' + time + '</span>' +
+            '</div>' +
+            '<div class="inv-summary-right">' +
+              '<strong>' + money(inv.total||0) + '</strong>' +
+              '<span class="inv-chevron">▾</span>' +
+            '</div>' +
+          '</div>' +
+          (hasLines ? '<div class="inv-detail">' +
+            lineRows +
+            '<div class="inv-sep"></div>' +
+            '<div class="inv-line muted"><span>Subtotal</span><span style="font-family:var(--mono)">' + money(inv.subtotal||0) + '</span></div>' +
+            '<div class="inv-line muted"><span>Service 4%</span><span style="font-family:var(--mono)">' + money(inv.service||0) + '</span></div>' +
+            '<div class="inv-line muted"><span>GST 5%</span><span style="font-family:var(--mono)">' + money(inv.tax||0) + '</span></div>' +
+            '<div class="inv-line grand"><span>Total</span><span style="font-family:var(--mono)">' + money(inv.total||0) + '</span></div>' +
+          '</div>' : '') +
+        '</div>';
+      }).join("");
+    }
+
+    // ── Firebase ──
+    async function boot() {
+      if (!window.SMARTSERVE_FIREBASE_CONFIG || !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
+          window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
+        document.getElementById("overlay").classList.add("hidden");
+        document.getElementById("date-label").textContent = "Local mode — no Firebase configured";
+        return;
+      }
+
+      try {
+        const [appM, authM, fsM] = await Promise.all([
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-app.js"),
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-auth.js"),
+          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-firestore.js"),
+        ]);
+
+        let app;
+        try { app = appM.getApp("report"); }
+        catch { app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "report"); }
+
+        const auth = authM.getAuth(app);
+        const db   = fsM.getFirestore(app);
+
+        authM.onAuthStateChanged(auth, async function (user) {
+          if (!user) {
+            document.getElementById("overlay").classList.remove("hidden");
+            return;
+          }
+          document.getElementById("overlay").classList.add("hidden");
+
+          // Resolve restaurant
+          const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
+          if (!idx.exists()) return;
+          const rid = idx.data().restaurantId;
+          document.getElementById("restaurant-label").textContent = rid;
+
+          // Load state
+          const snap = await fsM.getDoc(fsM.doc(db, "restaurants", rid, "smartserve", "state"));
+          if (snap.exists()) {
+            const data = snap.data();
+            invoices = (data.invoices || []).map(function (inv) {
+              return Object.assign({}, inv, {
+                closedAt: inv.closedAt instanceof Date ? inv.closedAt :
+                  (typeof inv.closedAt?.toDate === "function" ? inv.closedAt.toDate() : new Date(inv.closedAt))
+              });
+            });
+          }
+          render();
+        });
+
+        document.getElementById("login-form").addEventListener("submit", async function (e) {
+          e.preventDefault();
+          const email = document.getElementById("sr-email").value.trim();
+          const pass  = document.getElementById("sr-password").value;
+          const msg   = document.getElementById("login-msg");
+          const btn   = document.getElementById("sr-signin-btn");
+          msg.textContent = "Signing in…"; msg.className = "login-msg";
+          btn.disabled = true;
+          try {
+            await authM.signInWithEmailAndPassword(auth, email, pass);
+          } catch (err) {
+            const msgs = { "auth/invalid-credential": "Invalid email or password.", "auth/user-not-found": "No account found.", "auth/wrong-password": "Wrong password." };
+            msg.textContent = msgs[err.code] || err.message;
+            msg.className   = "login-msg error";
+            btn.disabled = false;
+          }
+        });
+
+      } catch (e) {
+        console.error("Report boot failed", e);
+        document.getElementById("login-msg").textContent = "Firebase connection failed.";
+        document.getElementById("login-msg").className   = "login-msg error";
+      }
+    }
+
+    render();
+    boot();
+  })();
+  </script>
+</body>
+</html>
