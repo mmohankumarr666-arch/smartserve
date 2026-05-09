@@ -744,7 +744,7 @@ document.addEventListener("DOMContentLoaded", function() {
       await sync.authModule.signOut(sync.auth);
       sync.pendingRegistration = false;
 
-      const planLabel = plan === "yearly" ? "Yearly — ₹4,999/year" : "Monthly — ₹499/month";
+      const planLabel = plan === "yearly" ? "Yearly — ₹9,999/year" : "Monthly — ₹999/month";
       const waMessage = encodeURIComponent(
         "Hi! I just registered on SmartServe.\n\n" +
         "Restaurant: " + restaurantName + "\n" +
