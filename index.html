@@ -5,18 +5,163 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SmartServe Dashboard</title>
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* ── Admin panel (inline, no separate page needed) ── */
+      #admin-panel {
+        position: fixed;
+        inset: 0;
+        background: var(--bg, #f5f4f0);
+        z-index: 200;
+        overflow-y: auto;
+        display: none;
+      }
+      #admin-panel.visible { display: block; }
+
+      .admin-shell {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 20px 60px;
+      }
+      .admin-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .admin-topbar h1 { font-size: 1.4rem; font-weight: 700; }
+      .admin-topbar .right { display: flex; gap: 10px; align-items: center; }
+      .eyebrow-sm {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--text-muted, #7a7670);
+        margin-bottom: 3px;
+      }
+
+      /* Stats strip */
+      .admin-stats {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+      .admin-stat {
+        background: #fff;
+        border-radius: 10px;
+        padding: 16px 20px;
+        flex: 1;
+        min-width: 110px;
+        border: 1.5px solid #e4e2da;
+      }
+      .admin-stat .lbl {
+        font-size: 0.72rem;
+        color: var(--text-muted, #7a7670);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+      .admin-stat .val {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+
+      /* Sub cards */
+      .admin-cards-grid { display: grid; gap: 14px; }
+      .sub-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1.5px solid #e4e2da;
+        padding: 20px 22px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px 20px;
+        align-items: start;
+      }
+      .sub-card .s-name { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+      .sub-card .s-meta { font-size: 0.8rem; color: var(--text-muted, #7a7670); line-height: 1.7; }
+      .sub-card .s-meta strong { color: #1a1a1a; }
+      .sub-card .s-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+      .extend-row { display: flex; gap: 8px; align-items: center; }
+      .extend-row input[type=date] {
+        padding: 6px 10px;
+        border: 1.5px solid #e4e2da;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-family: inherit;
+      }
+
+      /* Badges */
+      .sbadge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      .sbadge.active  { background: #edf7f1; color: #1e8a4a; }
+      .sbadge.expired { background: #fef2f2; color: #c0392b; }
+      .sbadge.monthly { background: #eff6ff; color: #1d4ed8; }
+      .sbadge.yearly  { background: #f5f3ff; color: #6d28d9; }
+
+      /* Small buttons */
+      .btn-xs {
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        font-family: inherit;
+      }
+      .btn-activate { background: #1e8a4a; color: #fff; }
+      .btn-suspend  { background: #c0392b; color: #fff; }
+      .btn-admin-out {
+        background: transparent;
+        border: 1.5px solid #c8c5bb;
+        color: #1a1a1a;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-admin-out:hover { background: #f1f0ec; }
+
+      .admin-empty { text-align: center; padding: 60px; color: var(--text-muted, #7a7670); }
+      .admin-msg {
+        font-size: 0.82rem;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin-top: -4px;
+      }
+      .admin-msg.error { background: #fef2f2; color: #c0392b; }
+      .admin-msg.info  { background: #edf7f1; color: #1e8a4a; }
+    </style>
   </head>
   <body>
+
+    <!-- ══════════════════════════════════════════════
+         LOGIN / REGISTER / ADMIN AUTH SCREEN
+    ══════════════════════════════════════════════ -->
     <section id="login-screen" class="login-screen">
       <div class="login-card">
         <div>
-          <p class="eyebrow">Staff portal</p>
+          <p class="eyebrow">Staff &amp; admin portal</p>
           <h1>SmartServe</h1>
         </div>
 
+        <!-- Three tabs: Sign In | Register | Admin -->
         <div class="auth-tabs">
-          <button class="auth-tab active" id="tab-login" type="button">Sign In</button>
-          <button class="auth-tab" id="tab-register" type="button">Register</button>
+          <button class="auth-tab active" id="tab-login"    type="button">Sign In</button>
+          <button class="auth-tab"        id="tab-register" type="button">Register</button>
+          <button class="auth-tab"        id="tab-admin"    type="button">Admin</button>
         </div>
 
         <!-- Login form -->
@@ -42,9 +187,50 @@
           <button class="primary-action" type="submit">Create Account</button>
           <p id="register-message" class="login-message">You will be the owner of this restaurant.</p>
         </form>
+
+        <!-- Admin login form -->
+        <form id="admin-login-form" class="auth-form hidden">
+          <label>Admin Email<input id="admin-email-input" type="email" autocomplete="email" required /></label>
+          <label>Admin Password<input id="admin-password-input" type="password" required /></label>
+          <button class="primary-action" type="submit">Sign In as Admin</button>
+          <p id="admin-login-message" class="login-message">Platform owner access only.</p>
+        </form>
       </div>
     </section>
 
+    <!-- ══════════════════════════════════════════════
+         ADMIN PANEL (slides over everything)
+    ══════════════════════════════════════════════ -->
+    <div id="admin-panel">
+      <div class="admin-shell">
+        <div class="admin-topbar">
+          <div>
+            <p class="eyebrow-sm">Platform owner</p>
+            <h1>SmartServe Admin</h1>
+          </div>
+          <div class="right">
+            <span id="admin-email-label" style="font-size:.82rem;color:#7a7670"></span>
+            <button class="btn-admin-out" id="admin-logout-btn">Sign Out</button>
+          </div>
+        </div>
+
+        <div class="admin-stats">
+          <div class="admin-stat"><div class="lbl">Total restaurants</div><div class="val" id="stat-total">—</div></div>
+          <div class="admin-stat"><div class="lbl">Active</div><div class="val" id="stat-active" style="color:#1e8a4a">—</div></div>
+          <div class="admin-stat"><div class="lbl">Expired</div><div class="val" id="stat-expired" style="color:#c0392b">—</div></div>
+          <div class="admin-stat"><div class="lbl">Monthly</div><div class="val" id="stat-monthly">—</div></div>
+          <div class="admin-stat"><div class="lbl">Yearly</div><div class="val" id="stat-yearly">—</div></div>
+        </div>
+
+        <div id="sub-cards" class="admin-cards-grid">
+          <div class="admin-empty">Loading subscriptions…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         STAFF DASHBOARD (existing)
+    ══════════════════════════════════════════════ -->
     <main class="shell dashboard-shell">
       <header class="topbar">
         <div>
@@ -141,7 +327,229 @@
     <audio id="beep" preload="auto">
       <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAP//" type="audio/wav" />
     </audio>
+
     <script src="firebase-config.js"></script>
     <script src="app.js"></script>
+
+    <!-- ══════════════════════════════════════════════
+         ADMIN TAB LOGIC  (self-contained, no app.js changes needed)
+    ══════════════════════════════════════════════ -->
+    <script>
+    (function () {
+      const FBV = "10.12.5";
+      let adminAuth, adminAuthMod, adminFsMod, adminDb;
+      let adminBooted = false;
+
+      /* ── Tab switching (extend existing tabs) ── */
+      const tabs = {
+        login:    document.getElementById("tab-login"),
+        register: document.getElementById("tab-register"),
+        admin:    document.getElementById("tab-admin"),
+      };
+      const forms = {
+        login:    document.getElementById("login-form"),
+        register: document.getElementById("register-form"),
+        admin:    document.getElementById("admin-login-form"),
+      };
+
+      function switchTab(name) {
+        Object.values(tabs).forEach(t => t.classList.remove("active"));
+        Object.values(forms).forEach(f => f.classList.add("hidden"));
+        tabs[name].classList.add("active");
+        forms[name].classList.remove("hidden");
+        if (name === "admin" && !adminBooted) bootAdmin();
+      }
+
+      tabs.login.addEventListener("click",    () => switchTab("login"));
+      tabs.register.addEventListener("click", () => switchTab("register"));
+      tabs.admin.addEventListener("click",    () => switchTab("admin"));
+
+      /* ── Admin message helper ── */
+      function adminMsg(text, isError) {
+        const el = document.getElementById("admin-login-message");
+        el.textContent = text;
+        el.className = "login-message" + (isError ? " error" : "");
+      }
+
+      /* ── Boot Firebase for admin (shares same config) ── */
+      async function bootAdmin() {
+        adminBooted = true;
+        adminMsg("Connecting…");
+        try {
+          const [appM, authM, fsM] = await Promise.all([
+            import(`https://www.gstatic.com/firebasejs/${FBV}/firebase-app.js`),
+            import(`https://www.gstatic.com/firebasejs/${FBV}/firebase-auth.js`),
+            import(`https://www.gstatic.com/firebasejs/${FBV}/firebase-firestore.js`),
+          ]);
+          adminAuthMod = authM;
+          adminFsMod   = fsM;
+
+          // Re-use existing Firebase app if already initialised by app.js,
+          // otherwise create a second named app.
+          let app;
+          try {
+            app = appM.getApp("admin");
+          } catch {
+            app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "admin");
+          }
+          adminAuth = authM.getAuth(app);
+          adminDb   = fsM.getFirestore(app);
+
+          adminMsg("Ready. Sign in with your admin account.");
+
+          authM.onAuthStateChanged(adminAuth, async (user) => {
+            if (!user) return;
+            // Verify the user is in the "admins" collection
+            const snap = await fsM.getDoc(fsM.doc(adminDb, "admins", user.uid));
+            if (!snap.exists()) {
+              adminMsg("This account is not an admin.", true);
+              await authM.signOut(adminAuth);
+              return;
+            }
+            showAdminPanel(user);
+          });
+        } catch (e) {
+          console.error("Admin Firebase boot failed", e);
+          adminMsg("Firebase connection failed. Check firebase-config.js.", true);
+        }
+      }
+
+      /* ── Admin sign-in form submit ── */
+      document.getElementById("admin-login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!adminAuthMod || !adminAuth) { adminMsg("Still connecting, please wait…", true); return; }
+        const email    = document.getElementById("admin-email-input").value.trim();
+        const password = document.getElementById("admin-password-input").value;
+        adminMsg("Signing in…");
+        try {
+          await adminAuthMod.signInWithEmailAndPassword(adminAuth, email, password);
+        } catch (err) {
+          const msgs = {
+            "auth/invalid-credential": "Invalid email or password.",
+            "auth/user-not-found":     "No account found.",
+            "auth/wrong-password":     "Wrong password.",
+          };
+          adminMsg(msgs[err.code] || err.message, true);
+        }
+      });
+
+      /* ── Show admin panel ── */
+      function showAdminPanel(user) {
+        document.getElementById("admin-email-label").textContent = user.email;
+        document.getElementById("admin-panel").classList.add("visible");
+        // Hide the login screen behind the panel
+        document.getElementById("login-screen").style.display = "none";
+        loadSubscriptions();
+      }
+
+      /* ── Admin sign-out ── */
+      document.getElementById("admin-logout-btn").addEventListener("click", async () => {
+        if (adminAuthMod && adminAuth) await adminAuthMod.signOut(adminAuth);
+        document.getElementById("admin-panel").classList.remove("visible");
+        document.getElementById("login-screen").style.display = "";
+        switchTab("admin");
+        adminMsg("Signed out.");
+      });
+
+      /* ── Load subscriptions ── */
+      async function loadSubscriptions() {
+        document.getElementById("sub-cards").innerHTML = '<div class="admin-empty">Loading…</div>';
+        try {
+          const snap = await adminFsMod.getDocs(adminFsMod.collection(adminDb, "subscriptions"));
+          const subs = [];
+          snap.forEach(d => subs.push({ ...d.data(), _id: d.id }));
+          subs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          renderStats(subs);
+          renderCards(subs);
+        } catch (e) {
+          document.getElementById("sub-cards").innerHTML =
+            '<div class="admin-empty">Failed to load: ' + escH(e.message) + '</div>';
+        }
+      }
+
+      function isExpired(sub) {
+        return sub.status !== "active" || new Date(sub.expiryDate) < new Date();
+      }
+
+      function renderStats(subs) {
+        document.getElementById("stat-total").textContent   = subs.length;
+        document.getElementById("stat-active").textContent  = subs.filter(s => !isExpired(s)).length;
+        document.getElementById("stat-expired").textContent = subs.filter(s => isExpired(s)).length;
+        document.getElementById("stat-monthly").textContent = subs.filter(s => s.plan === "monthly").length;
+        document.getElementById("stat-yearly").textContent  = subs.filter(s => s.plan === "yearly").length;
+      }
+
+      function renderCards(subs) {
+        const container = document.getElementById("sub-cards");
+        if (!subs.length) {
+          container.innerHTML = '<div class="admin-empty">No restaurants registered yet.</div>';
+          return;
+        }
+        container.innerHTML = subs.map(sub => {
+          const expired  = isExpired(sub);
+          const expDate  = new Date(sub.expiryDate).toLocaleDateString("en-IN", { dateStyle: "medium" });
+          const startDate = new Date(sub.createdAt || sub.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" });
+          const defaultExtend = new Date();
+          if (sub.plan === "yearly") defaultExtend.setFullYear(defaultExtend.getFullYear() + 1);
+          else defaultExtend.setMonth(defaultExtend.getMonth() + 1);
+          const defStr = defaultExtend.toISOString().split("T")[0];
+          const today  = new Date().toISOString().split("T")[0];
+
+          return `
+          <div class="sub-card" id="acard-${escH(sub.restaurantId || sub._id)}">
+            <div>
+              <div class="s-name">${escH(sub.restaurantName || sub.restaurantId || sub._id)}</div>
+              <div class="s-meta">
+                <strong>ID:</strong> ${escH(sub.restaurantId || sub._id)}<br>
+                <strong>Owner:</strong> ${escH(sub.ownerName || "—")} (${escH(sub.ownerEmail || "—")})<br>
+                <strong>Plan:</strong> <span class="sbadge ${sub.plan || ""}">${escH(sub.plan || "—")}</span><br>
+                <strong>Started:</strong> ${startDate}<br>
+                <strong>Expires:</strong> ${expDate}
+              </div>
+            </div>
+            <div class="s-actions">
+              <span class="sbadge ${expired ? "expired" : "active"}">${expired ? "Expired" : "Active"}</span>
+              <div class="extend-row">
+                <input type="date" id="adate-${escH(sub.restaurantId || sub._id)}" value="${defStr}" min="${today}" />
+                <button class="btn-xs btn-activate" onclick="adminActivate('${escH(sub.restaurantId || sub._id)}')">Activate</button>
+              </div>
+              <button class="btn-xs btn-suspend" onclick="adminSuspend('${escH(sub.restaurantId || sub._id)}')">Suspend</button>
+            </div>
+          </div>`;
+        }).join("");
+      }
+
+      /* ── Exposed globally so inline onclick works ── */
+      window.adminActivate = async function (rid) {
+        const dateInput = document.getElementById("adate-" + rid);
+        const newExpiry = new Date(dateInput.value);
+        if (!dateInput.value || isNaN(newExpiry)) { alert("Pick a valid expiry date."); return; }
+        newExpiry.setHours(23, 59, 59, 999);
+        try {
+          await adminFsMod.updateDoc(adminFsMod.doc(adminDb, "subscriptions", rid), {
+            status: "active",
+            expiryDate: newExpiry.toISOString(),
+          });
+          alert("✅ Activated " + rid + " until " + newExpiry.toLocaleDateString("en-IN"));
+          loadSubscriptions();
+        } catch (e) { alert("Error: " + e.message); }
+      };
+
+      window.adminSuspend = async function (rid) {
+        if (!confirm("Suspend subscription for " + rid + "? They will lose access immediately.")) return;
+        try {
+          await adminFsMod.updateDoc(adminFsMod.doc(adminDb, "subscriptions", rid), { status: "suspended" });
+          alert("Subscription suspended.");
+          loadSubscriptions();
+        } catch (e) { alert("Error: " + e.message); }
+      };
+
+      function escH(v) {
+        return String(v).replace(/[&<>"']/g, c =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+    })();
+    </script>
+
   </body>
 </html>
