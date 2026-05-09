@@ -742,50 +742,60 @@
     };
 
     async function startKot(uid) {
-      setStatus("Loading KOT…", true);
-      try {
-        // Resolve restaurantId from staffIndex
-        const idxSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", uid));
-        if (!idxSnap.exists()) { setStatus("No restaurant found", false); return; }
-        restaurantId = idxSnap.data().restaurantId;
+  setStatus("Loading KOT…", true);
+  try {
+    let rid = null;
 
-        kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
+    // Try staffIndex first
+    try {
+      const idxSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", uid));
+      if (idxSnap.exists()) rid = idxSnap.data().restaurantId;
+    } catch (e) { console.warn("staffIndex read failed", e); }
 
-        // Listen to all KOT tickets (today's; limit 100 newest)
-        const q = fsMod.query(kotCol, fsMod.orderBy("createdAt", "desc"), fsMod.limit(100));
-
-        fsMod.onSnapshot(q, function (snap) {
-          const isFirst = Object.keys(tickets).length === 0;
-          let hasNew = false;
-
-          snap.docChanges().forEach(function (change) {
-            const id   = change.doc.id;
-            const data = change.doc.data();
-            if (change.type === "added") {
-              tickets[id] = data;
-              if (!isFirst && data.status !== "done") hasNew = true;
-            } else if (change.type === "modified") {
-              tickets[id] = data;
-            } else if (change.type === "removed") {
-              delete tickets[id];
-            }
-          });
-
-          if (hasNew) playBeep();
-          renderTickets();
-          setStatus("Live · " + restaurantId, true);
-          document.getElementById("login-overlay").classList.add("hidden");
-          document.getElementById("stats-bar").style.display = "";
-        }, function (e) {
-          console.error("KOT snapshot failed", e);
-          setStatus("Sync error", false);
-        });
-
-      } catch (e) {
-        console.error("KOT start failed", e);
-        setStatus("Error: " + e.message, false);
-      }
+    // Fallback: use ?restaurant= URL param
+    if (!rid) {
+      rid = new URLSearchParams(window.location.search).get("restaurant");
     }
+
+    // Fallback: try the staff subcollection directly if URL param exists
+    if (!rid) {
+      document.getElementById("login-overlay").classList.remove("hidden");
+      loginMsg("No restaurant linked to this account. Open KOT from your dashboard instead of directly.", true);
+      setStatus("Not linked", false);
+      return;
+    }
+
+    restaurantId = rid;
+    kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
+    const q = fsMod.query(kotCol, fsMod.orderBy("createdAt", "desc"), fsMod.limit(100));
+
+    fsMod.onSnapshot(q, function (snap) {
+      const isFirst = Object.keys(tickets).length === 0;
+      let hasNew = false;
+      snap.docChanges().forEach(function (change) {
+        const id   = change.doc.id;
+        const data = change.doc.data();
+        if (change.type === "added")    { tickets[id] = data; if (!isFirst && data.status !== "done") hasNew = true; }
+        if (change.type === "modified") { tickets[id] = data; }
+        if (change.type === "removed")  { delete tickets[id]; }
+      });
+      if (hasNew) playBeep();
+      renderTickets();
+      setStatus("Live · " + restaurantId, true);
+      document.getElementById("login-overlay").classList.add("hidden");
+      document.getElementById("stats-bar").style.display = "";
+    }, function (e) {
+      console.error("KOT snapshot failed", e);
+      setStatus("Sync error — check Firestore rules", false);
+    });
+
+  } catch (e) {
+    console.error("KOT start failed", e);
+    setStatus("Error: " + e.message, false);
+    document.getElementById("login-overlay").classList.remove("hidden");
+    loginMsg("Sign-in failed: " + e.message, true);
+  }
+}
 
     async function bootFirebase() {
       if (!window.SMARTSERVE_FIREBASE_CONFIG || !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
