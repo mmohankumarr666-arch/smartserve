@@ -11,4 +11,4 @@ window.SMARTSERVE_FIREBASE_CONFIG = {
 };
 
 // Change this if you later host multiple restaurants from the same Firebase project.
-window.SMARTSERVE_RESTAURANT_ID = "demo-restaurant";
+window.SMARTSERVE_RESTAURANT_ID = "";
