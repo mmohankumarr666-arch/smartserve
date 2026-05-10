@@ -15,6 +15,21 @@ const menu = [
   { id: "brownie",        name: "Sizzling Brownie",   desc: "Chocolate brownie, vanilla scoop",           price: 190, category: "dessert", available: true },
 ];
 
+// ─── Server roster ────────────────────────────────────────────────────────────
+// Maps tables to servers in rotation. Edit names here to match your staff.
+// Table 1 → serverRoster[0], Table 2 → serverRoster[1], etc. Cycles if more tables than servers.
+const serverRoster = [
+  "Arjun",
+  "Priya",
+  "Karthik",
+  "Meena",
+];
+
+function getServerForTable(tableId) {
+  const num = tableNumber(tableId) - 1; // 0-indexed
+  return serverRoster[num % serverRoster.length];
+}
+
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 function slugify(value) {
   const slug = String(value).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -97,6 +112,7 @@ const sync = {
   saveTimer: null, stateDoc: null, detailsDoc: null,
   auth: null, authModule: null, firestoreModule: null, db: null, setDoc: null,
   pendingRegistration: false,
+  kotUnsubscribe: null,   // ← store KOT listener so we can clean it up if needed
 };
 
 function ensureTable(tableId) {
@@ -203,6 +219,108 @@ function updateRegisterMessage(text, isError) {
   el.classList.toggle("error", !!isError);
 }
 
+// ─── Food Ready Toast Notifications ──────────────────────────────────────────
+// Called when kitchen marks a KOT ticket as "done".
+// Shows a pop-up banner with table, dishes, and which server should collect.
+
+function playReadyBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Pleasant four-note "ding ding" — distinct from the order beep
+    [[1047, 0], [1319, 0.18], [1047, 0.36], [1568, 0.52]].forEach(function([freq, when]) {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + when);
+      gain.gain.setValueAtTime(0,    ctx.currentTime + when);
+      gain.gain.linearRampToValueAtTime(0.28, ctx.currentTime + when + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + 0.38);
+      osc.start(ctx.currentTime + when);
+      osc.stop(ctx.currentTime + when + 0.4);
+    });
+  } catch (e) {}
+}
+
+function showFoodReadyToast(tableId, items) {
+  // Get or create the toast container
+  var container = document.getElementById("food-ready-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "food-ready-container";
+    document.body.appendChild(container);
+  }
+
+  const serverName = getServerForTable(tableId);
+  const dishTags   = items.map(function(item) {
+    return "<span>" + escapeHtml(item.name) + " \u00D7" + item.qty + "</span>";
+  }).join("");
+
+  const toast = document.createElement("div");
+  toast.className = "food-ready-toast";
+  toast.innerHTML =
+    '<div class="toast-header">' +
+      '<div class="toast-badge"><div class="dot"></div>Kitchen Ready</div>' +
+      '<button class="toast-dismiss" title="Dismiss">\u2715</button>' +
+    '</div>' +
+    '<div class="toast-table">\uD83C\uDF7D\uFE0F ' + escapeHtml(tableLabel(tableId)) + '</div>' +
+    '<div class="toast-dishes">' + dishTags + '</div>' +
+    '<div class="toast-server"><span class="icon">\uD83D\uDC64</span>Collect &amp; serve: <strong>' + escapeHtml(serverName) + '</strong></div>';
+
+  container.prepend(toast);
+  playReadyBeep();
+
+  function dismissToast() {
+    clearTimeout(toast._timer);
+    toast.style.transition = "opacity .25s, transform .25s";
+    toast.style.opacity    = "0";
+    toast.style.transform  = "translateX(60px)";
+    setTimeout(function() { toast.remove(); }, 260);
+  }
+
+  toast.querySelector(".toast-dismiss").addEventListener("click", dismissToast);
+  toast._timer = setTimeout(dismissToast, 8000); // auto-dismiss after 8s
+}
+
+// ─── KOT "done" listener ──────────────────────────────────────────────────────
+// Watches the KOT collection for tickets that flip to status="done"
+// and fires a food-ready notification on the dashboard.
+function startKotDoneListener(fsMod, db) {
+  // Unsubscribe any existing listener first (e.g. if restaurant switches)
+  if (sync.kotUnsubscribe) {
+    sync.kotUnsubscribe();
+    sync.kotUnsubscribe = null;
+  }
+
+  const kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
+
+  // We only care about tickets that are currently "done" changing,
+  // so we listen to the whole collection and filter on "modified" events.
+  // We also track which IDs we've already notified so we don't double-fire.
+  const notifiedDone = new Set();
+
+  sync.kotUnsubscribe = fsMod.onSnapshot(kotCol, function(snap) {
+    snap.docChanges().forEach(function(change) {
+      const data = change.doc.data();
+      const id   = change.doc.id;
+
+      // Only fire on a ticket becoming "done" for the first time
+      if (change.type === "modified" && data.status === "done" && !notifiedDone.has(id)) {
+        notifiedDone.add(id);
+        showFoodReadyToast(data.tableId, data.items || []);
+      }
+
+      // If a ticket is undone (back to pending) allow re-notification next time
+      if (data.status === "pending") {
+        notifiedDone.delete(id);
+      }
+    });
+  }, function(e) {
+    console.error("KOT done listener failed", e);
+  });
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderDashboard() {
   document.querySelector("#restaurant-id-label").textContent = restaurantId;
@@ -306,7 +424,6 @@ function renderHistory() {
   }).join("");
 }
 
-// ─── Render restaurant details form ──────────────────────────────────────────
 function renderDetailsForm() {
   document.querySelector("#detail-name").value    = restaurantDetails.name    || "";
   document.querySelector("#detail-address").value = restaurantDetails.address || "";
@@ -521,13 +638,13 @@ async function saveRestaurantDetails(event) {
   if (sync.enabled && sync.detailsDoc && sync.setDoc) {
     try {
       await sync.setDoc(sync.detailsDoc, Object.assign({}, restaurantDetails, { updatedAt: new Date().toISOString() }), { merge: true });
-      msg.textContent = "Saved to Firebase ✓";
+      msg.textContent = "Saved to Firebase \u2713";
     } catch (e) {
       console.error("Details save failed", e);
-      msg.textContent = "Save failed — check connection.";
+      msg.textContent = "Save failed \u2014 check connection.";
     }
   } else {
-    msg.textContent = "Saved locally ✓";
+    msg.textContent = "Saved locally \u2713";
   }
   setTimeout(function() { msg.textContent = ""; }, 3000);
 }
@@ -595,7 +712,6 @@ async function connectFirebase() {
       }
 
       try {
-        // Look up the owner's restaurant via staffIndex
         const indexSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", user.uid));
         if (!indexSnap.exists()) {
           await authMod.signOut(auth);
@@ -605,7 +721,6 @@ async function connectFirebase() {
 
         const resolvedRestaurantId = indexSnap.data().restaurantId;
 
-        // Verify subscription
         const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", resolvedRestaurantId));
         if (!subSnap.exists()) {
           await authMod.signOut(auth);
@@ -693,6 +808,9 @@ async function loadDashboardState(fsMod, db) {
       renderAndSave();
     }
   }, function(e) { console.error("Orders listener failed", e); });
+
+  // ── Start listening for kitchen "done" events to notify servers ──
+  startKotDoneListener(fsMod, db);
 }
 
 // ─── Boot — wait for DOM ──────────────────────────────────────────────────────
@@ -791,7 +909,7 @@ document.addEventListener("DOMContentLoaded", function() {
       await sync.authModule.signOut(sync.auth);
       sync.pendingRegistration = false;
 
-      const planLabel = plan === "yearly" ? "Yearly — ₹9,999/year" : "Monthly — ₹999/month";
+      const planLabel = plan === "yearly" ? "Yearly \u2014 \u20B99,999/year" : "Monthly \u2014 \u20B9999/month";
       const waMessage = encodeURIComponent(
         "Hi! I just registered on SmartServe.\n\n" +
         "Restaurant: " + restaurantName + "\n" +
