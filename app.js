@@ -444,7 +444,6 @@ function printBill() {
   var total   = totals(lines);
   var now     = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
-  // Use saved restaurant details, fall back to restaurantId-derived name
   var billName    = restaurantDetails.name    || restaurantId.replace(/-/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
   var billAddress = restaurantDetails.address || "";
   var billPhone   = restaurantDetails.phone   || "";
@@ -452,7 +451,6 @@ function printBill() {
   var billEmail   = restaurantDetails.email   || "";
   var billFssai   = restaurantDetails.fssai   || "";
 
-  // Invoice number: next in sequence (invoices.length + 1 since this hasn't been closed yet)
   var invoiceNum  = "INV-" + String(state.invoices.length + 1).padStart(3, "0");
 
   var rows = lines.map(function(l) {
@@ -478,7 +476,6 @@ function printBill() {
     "@media print{body{padding:0}}"
   ].join("");
 
-  // Build header info lines
   var headerLines = "";
   if (billAddress) headerLines += "<div class='sub'>" + escapeHtml(billAddress).replace(/\n/g, "<br>") + "</div>";
   if (billPhone)   headerLines += "<div class='sub'>Ph: " + escapeHtml(billPhone) + "</div>";
@@ -592,51 +589,23 @@ async function connectFirebase() {
       if (!user) {
         document.body.classList.add("auth-locked");
         document.body.classList.remove("auth-ready");
-        updateLoginMessage("Use your staff account to sign in.");
+        updateLoginMessage("Use your owner account to sign in.");
         updateSyncStatus("Signed out");
         return;
       }
 
       try {
-        let resolvedRestaurantId = null;
-        let staffDocExists = false;
-
+        // Look up the owner's restaurant via staffIndex
         const indexSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", user.uid));
-        if (indexSnap.exists()) {
-          resolvedRestaurantId = indexSnap.data().restaurantId;
-          const staffSnap = await fsMod.getDoc(
-            fsMod.doc(db, "restaurants", resolvedRestaurantId, "staff", user.uid)
-          );
-          staffDocExists = staffSnap.exists();
-          if (staffDocExists && staffSnap.data().restaurantId) {
-            resolvedRestaurantId = staffSnap.data().restaurantId;
-          }
-        }
-
-        if (!staffDocExists) {
-          const urlRestaurantId = resolveRestaurantId();
-          if (urlRestaurantId && urlRestaurantId !== "demo-restaurant") {
-            const staffSnap = await fsMod.getDoc(
-              fsMod.doc(db, "restaurants", urlRestaurantId, "staff", user.uid)
-            );
-            if (staffSnap.exists()) {
-              resolvedRestaurantId = staffSnap.data().restaurantId || urlRestaurantId;
-              staffDocExists = true;
-              await fsMod.setDoc(
-                fsMod.doc(db, "staffIndex", user.uid),
-                { restaurantId: resolvedRestaurantId, email: user.email, createdAt: new Date().toISOString() },
-                { merge: true }
-              );
-            }
-          }
-        }
-
-        if (!resolvedRestaurantId || !staffDocExists) {
+        if (!indexSnap.exists()) {
           await authMod.signOut(auth);
           updateLoginMessage("No restaurant found for this account. Contact support on WhatsApp: 8610741387", true);
           return;
         }
 
+        const resolvedRestaurantId = indexSnap.data().restaurantId;
+
+        // Verify subscription
         const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", resolvedRestaurantId));
         if (!subSnap.exists()) {
           await authMod.signOut(auth);
@@ -650,8 +619,8 @@ async function connectFirebase() {
           return;
         }
 
-        restaurantId   = resolvedRestaurantId;
-        sync.stateDoc  = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
+        restaurantId    = resolvedRestaurantId;
+        sync.stateDoc   = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
         sync.detailsDoc = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "details");
 
         const newUrl = new URL(window.location.href);
@@ -683,7 +652,6 @@ async function loadDashboardState(fsMod, db) {
   if (snap.exists()) { applyRemoteState(snap.data()); }
   else               { await sync.setDoc(sync.stateDoc, serializeState(), { merge: true }); }
 
-  // Load restaurant details
   await loadRestaurantDetails(fsMod, db);
 
   sync.loaded = true;
@@ -709,13 +677,12 @@ async function loadDashboardState(fsMod, db) {
       if (billRequested) {
         state.sessions[tableId].status        = "active";
         state.sessions[tableId].billRequested = true;
-     } else if (items && items.length) {
+      } else if (items && items.length) {
         const session = state.sessions[tableId];
         session.status        = "active";
         session.billRequested = false;
         session.orders.push({ id: "ORD-" + (session.orders.length + 1), createdAt: new Date(), items: items });
         showNotification(tableId, items.reduce(function(s, item) { return s + item.qty; }, 0));
-        // ── KOT: push to kitchen queue ──
         fsMod.setDoc(
           fsMod.doc(db, "restaurants", restaurantId, "kot", change.doc.id),
           { tableId: tableId, items: items, createdAt: new Date().toISOString(), status: "pending" }
@@ -727,79 +694,7 @@ async function loadDashboardState(fsMod, db) {
     }
   }, function(e) { console.error("Orders listener failed", e); });
 }
-// ─── Staff management ─────────────────────────────────────────────────────────
-function renderStaffList(staffMembers, invites) {
-  var el = document.querySelector("#staff-list");
-  if (!el) return;
-  var all = [];
-  staffMembers.forEach(function(s) {
-    all.push({ name: s.name || "Unknown", email: s.email || "", role: s.role || "staff", status: "active", uid: s.uid });
-  });
-  invites.forEach(function(inv) {
-    all.push({ name: inv.name || "", email: inv.email || "", role: inv.role || "staff", status: "pending" });
-  });
-  if (!all.length) {
-    el.innerHTML = '<p style="font-size:.83rem;color:var(--text-muted)">No staff added yet. Use the form above to invite team members.</p>';
-    return;
-  }
-  el.innerHTML = all.map(function(s) {
-    var isPending = s.status === "pending";
-    return '<div class="staff-item">' +
-      '<div class="staff-item-left">' +
-        '<strong>' + escapeHtml(s.name) + (isPending ? ' <em style="font-size:.75rem;font-weight:400;color:var(--text-muted)">(invite sent)</em>' : '') + '</strong>' +
-        '<small>' + escapeHtml(s.email) + '</small>' +
-      '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span class="role-badge ' + (isPending ? "pending" : s.role) + '">' + (isPending ? "Invited" : s.role) + '</span>' +
-        (isPending ? '<button class="icon-action danger" data-remove-invite="' + escapeHtml(s.email) + '">Remove</button>' : '') +
-      '</div>' +
-    '</div>';
-  }).join("");
-}
- 
-async function loadStaffList() {
-  if (!sync.enabled || !sync.firestoreModule || !sync.db) return;
-  var fsMod = sync.firestoreModule;
-  var db    = sync.db;
-  try {
-    var [staffSnap, inviteSnap] = await Promise.all([
-      fsMod.getDocs(fsMod.collection(db, "restaurants", restaurantId, "staff")),
-      fsMod.getDocs(fsMod.collection(db, "restaurants", restaurantId, "staff-invites")),
-    ]);
-    var staff   = [];
-    var invites = [];
-    staffSnap.forEach(function(d) { staff.push(Object.assign({ uid: d.id }, d.data())); });
-    inviteSnap.forEach(function(d) { if (d.data().status !== "accepted") invites.push(Object.assign({ email: d.id }, d.data())); });
-    renderStaffList(staff, invites);
-  } catch (e) { console.error("Load staff failed", e); }
-}
- 
-async function addStaffInvite(name, email, role) {
-  if (!sync.enabled || !sync.firestoreModule || !sync.db) return "Firebase not connected.";
-  var fsMod = sync.firestoreModule;
-  var db    = sync.db;
-  try {
-    await fsMod.setDoc(
-      fsMod.doc(db, "restaurants", restaurantId, "staff-invites", email.toLowerCase()),
-      { name: name, role: role, addedAt: new Date().toISOString(), status: "pending" }
-    );
-    await loadStaffList();
-    return null; // success
-  } catch (e) {
-    console.error("Add staff failed", e);
-    return "Failed: " + e.message;
-  }
-}
- 
-async function removeStaffInvite(email) {
-  if (!sync.enabled || !sync.firestoreModule || !sync.db) return;
-  var fsMod = sync.firestoreModule;
-  var db    = sync.db;
-  try {
-    await fsMod.deleteDoc(fsMod.doc(db, "restaurants", restaurantId, "staff-invites", email.toLowerCase()));
-    await loadStaffList();
-  } catch (e) { console.error("Remove invite failed", e); }
-}
+
 // ─── Boot — wait for DOM ──────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() {
 
@@ -941,36 +836,7 @@ document.addEventListener("DOMContentLoaded", function() {
   document.querySelector("#add-table-btn").addEventListener("click", addTable);
   document.querySelector("#close-table-btn").addEventListener("click", closeTable);
 
-  // Restaurant details form
   document.querySelector("#restaurant-details-form").addEventListener("submit", saveRestaurantDetails);
-  var staffForm = document.querySelector("#staff-invite-form");
-  if (staffForm) {
-    staffForm.addEventListener("submit", async function(e) {
-      e.preventDefault();
-      var name  = document.querySelector("#staff-name-input").value.trim();
-      var email = document.querySelector("#staff-email-input").value.trim().toLowerCase();
-      var role  = document.querySelector("#staff-role-input").value;
-      var msg   = document.querySelector("#staff-invite-msg");
-      var btn   = document.querySelector("#staff-invite-btn");
-      if (!name || !email) return;
-      btn.disabled = true; msg.textContent = "Adding…";
-      var err = await addStaffInvite(name, email, role);
-      if (err) {
-        msg.textContent = err; msg.style.color = "var(--red)";
-      } else {
-        msg.textContent = "✓ " + name + " added. Share your Restaurant ID with them.";
-        msg.style.color = "var(--green)";
-        document.querySelector("#staff-name-input").value  = "";
-        document.querySelector("#staff-email-input").value = "";
-      }
-      btn.disabled = false;
-      setTimeout(function() { msg.textContent = ""; }, 4000);
-    });
-  }
-  // Remove invite via delegated click (add inside the existing document.addEventListener("click",...) handler)
-  // Find: if (target.dataset.toggleInvoice) { ...}
-  // Add AFTER it:
-  // if (target.dataset.removeInvite) removeStaffInvite(target.dataset.removeInvite);
 
   document.addEventListener("click", function(event) {
     var target = event.target.closest("button");
@@ -983,6 +849,5 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   renderAll();
-  loadStaffList();
   connectFirebase();
 });
