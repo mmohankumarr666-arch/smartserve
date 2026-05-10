@@ -149,83 +149,42 @@
     .btn-sound:hover { border-color: var(--accent); color: var(--accent); }
     .btn-sound.muted-state { color: var(--red); border-color: var(--red); }
 
-    /* ── Login overlay ── */
-    .overlay {
-      position: fixed; inset: 0;
-      background: var(--bg);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 100;
-      padding: 20px;
-    }
-
-    .overlay.hidden { display: none; }
-
-    .login-box {
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: 16px;
-      padding: 32px 28px;
-      width: 100%;
-      max-width: 380px;
+    /* ── Error / no-restaurant screen ── */
+    .no-restaurant {
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
       gap: 16px;
+      padding: 40px 20px;
+      text-align: center;
     }
 
-    .login-box h2 { font-size: 1.2rem; font-weight: 700; }
+    .no-restaurant .icon { font-size: 3rem; opacity: .5; }
 
-    .login-box p {
-      font-size: 0.83rem;
-      color: var(--muted);
-      line-height: 1.5;
-    }
-
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--muted);
-      letter-spacing: .04em;
-      text-transform: uppercase;
-    }
-
-    .field input {
-      padding: 10px 12px;
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.9rem;
-      font-family: var(--sans);
-      outline: none;
-      transition: border-color .15s;
-    }
-
-    .field input:focus { border-color: var(--accent); }
-
-    .btn-primary {
-      padding: 11px 20px;
-      background: var(--accent);
-      color: #000;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.9rem;
+    .no-restaurant h2 {
+      font-size: 1.2rem;
       font-weight: 700;
-      cursor: pointer;
-      font-family: var(--sans);
-      transition: opacity .15s;
+      color: var(--text);
     }
-    .btn-primary:hover { opacity: .85; }
-    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 
-    .login-msg {
-      font-size: 0.8rem;
+    .no-restaurant p {
+      font-size: 0.88rem;
       color: var(--muted);
-      min-height: 1.2em;
+      max-width: 380px;
+      line-height: 1.6;
     }
-    .login-msg.error { color: var(--red); }
+
+    .no-restaurant code {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
 
     /* ── Main board ── */
     .board {
@@ -458,18 +417,6 @@
     .stat-chip.pending-stat .num { color: var(--amber); }
     .stat-chip.done-stat    .num { color: var(--green); }
 
-    /* ── No Firebase mode ── */
-    .local-banner {
-      background: rgba(245,158,11,.08);
-      border: 1px solid rgba(245,158,11,.25);
-      border-radius: 10px;
-      padding: 14px 18px;
-      font-size: 0.83rem;
-      color: var(--amber);
-      margin-bottom: 20px;
-      line-height: 1.5;
-    }
-
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .header { padding: 12px 14px; }
@@ -480,23 +427,6 @@
   </style>
 </head>
 <body>
-
-  <!-- ── Login overlay ── -->
-  <div class="overlay" id="login-overlay">
-    <div class="login-box">
-      <div>
-        <div class="logo" style="display:inline-block;margin-bottom:12px">SmartServe KOT</div>
-        <h2>Kitchen Display</h2>
-        <p style="margin-top:6px">Sign in with your staff account to view live orders.</p>
-      </div>
-      <form id="kot-login-form">
-        <div class="field">Email<input id="kot-email" type="email" autocomplete="email" required placeholder="staff@restaurant.com" /></div>
-        <div class="field" style="margin-top:8px">Password<input id="kot-password" type="password" autocomplete="current-password" required /></div>
-        <button class="btn-primary" type="submit" id="kot-sign-in-btn" style="margin-top:4px">Sign In</button>
-        <p class="login-msg" id="kot-login-msg">Use your staff credentials.</p>
-      </form>
-    </div>
-  </div>
 
   <!-- ── Header ── -->
   <div class="header">
@@ -528,9 +458,21 @@
         <span class="lbl">Completed today</span>
       </div>
     </div>
-    <div id="local-banner" class="local-banner" style="display:none">
-      ⚠️ <strong>Local mode:</strong> Firebase not configured. KOT requires Firebase to receive live orders. Set up <code>firebase-config.js</code> and refresh.
+
+    <!-- Shown if page opened without a restaurant ID -->
+    <div class="no-restaurant" id="no-restaurant-msg" style="display:none">
+      <div class="icon">🍳</div>
+      <h2>Open KOT from your dashboard</h2>
+      <p>
+        This page needs a restaurant ID to load orders.<br />
+        Go to your <strong>SmartServe dashboard</strong> and click the
+        <strong>🍳 Kitchen Display</strong> button — it will open this page with the correct link automatically.
+      </p>
+      <p style="margin-top:8px">
+        Or add <code>?restaurant=your-restaurant-id</code> to the URL manually.
+      </p>
     </div>
+
     <div class="empty-state" id="empty-state">
       <div class="icon">🍳</div>
       <p>Waiting for orders…</p>
@@ -539,21 +481,18 @@
     <div class="ticket-grid" id="ticket-grid" style="display:none"></div>
   </div>
 
-  <!-- Notification sound (generated tone) -->
-  <audio id="kot-beep" preload="auto">
-    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVYGAACBiY6TmJqZl5KMhHx0bGVgXVtaWlpbXV9iZmlucHFycXBvbmxqaGZjYF5cW1lYV1ZWVldYWVtcXV9hYmRlZmdoaWlqamppZ2ZlY2JhX15cW1lYVlVUU1NTU1RVVlhZWltcXV5fYGFiY2NkZGVlZWVkY2NiYWBfXl1bWllXVlVUU1NSUlJSU1RVVldYWVlaW1xcXV1eXl9fYGBgYGBgX19eXl1cW1pZWFdWVVRTUlFRUVFRUlNUVVZXWFlaW1tcXV5fYGFiY2NkZGVlZGRjYmFgX15dXFtZWFdWVVRTUlFQUFBQUFBRUlNUVVZXWFlaWlscHR4fICEhIiMjJCQkJCMjIiIhIB8eHRwbGhkYFxYVFBMSERAQDw8PDw8QERITFBUWGB" type="audio/wav" />
-  </audio>
-
   <script src="firebase-config.js"></script>
   <script>
   (function () {
     const FBV = "10.12.5";
 
     // ── State ──
-    const tickets   = {};   // kotId → ticket data
+    const tickets   = {};
     let   currentFilter = "pending";
     let   soundEnabled  = true;
-    let   restaurantId  = null;
+
+    // Read restaurant ID from URL — set by the dashboard's KOT link
+    const restaurantId = new URLSearchParams(window.location.search).get("restaurant");
 
     // ── Sound ──
     const soundBtn = document.getElementById("btn-sound");
@@ -565,7 +504,6 @@
 
     function playBeep() {
       if (!soundEnabled) return;
-      // Generate a short beep via AudioContext
       try {
         const ctx  = new (window.AudioContext || window.webkitAudioContext)();
         const osc  = ctx.createOscillator();
@@ -579,7 +517,7 @@
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.35);
       } catch (e) {
-        document.getElementById("kot-beep").play().catch(function(){});
+        // silent fallback
       }
     }
 
@@ -599,16 +537,10 @@
       document.getElementById("live-dot").style.background = ok ? "var(--green)" : "var(--red)";
     }
 
-    function loginMsg(text, isError) {
-      const el = document.getElementById("kot-login-msg");
-      el.textContent = text;
-      el.className   = "login-msg" + (isError ? " error" : "");
-    }
-
-    // ── Render ──
+    // ── Render helpers ──
     function elapsedLabel(isoString) {
       const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
-      if (diff < 60)  return diff + "s ago";
+      if (diff < 60)   return diff + "s ago";
       if (diff < 3600) return Math.floor(diff / 60) + "m ago";
       return Math.floor(diff / 3600) + "h ago";
     }
@@ -664,38 +596,33 @@
     }
 
     function renderTickets() {
-      const grid   = document.getElementById("ticket-grid");
-      const empty  = document.getElementById("empty-state");
-      const stats  = document.getElementById("stats-bar");
+      const grid  = document.getElementById("ticket-grid");
+      const empty = document.getElementById("empty-state");
+      const stats = document.getElementById("stats-bar");
 
       const all     = Object.entries(tickets);
       const pending = all.filter(function (e) { return e[1].status !== "done"; });
       const done    = all.filter(function (e) { return e[1].status === "done"; });
 
-      // Update counts
       document.getElementById("stat-pending").textContent  = pending.length;
       document.getElementById("stat-done").textContent     = done.length;
       document.getElementById("badge-pending").textContent = pending.length;
       document.getElementById("badge-done").textContent    = done.length;
 
-      // Filter
       let visible;
       if      (currentFilter === "pending") visible = pending;
       else if (currentFilter === "done")    visible = done;
       else                                  visible = all;
 
-      // Sort: newest pending first, done at bottom
       visible.sort(function (a, b) {
-        if (a[1].status === b[1].status) {
-          return new Date(b[1].createdAt) - new Date(a[1].createdAt);
-        }
+        if (a[1].status === b[1].status) return new Date(b[1].createdAt) - new Date(a[1].createdAt);
         return a[1].status === "done" ? 1 : -1;
       });
 
       if (!visible.length) {
         grid.style.display  = "none";
         empty.style.display = "";
-        empty.querySelector("p").textContent    = currentFilter === "done" ? "No completed orders yet" : "No pending orders — all clear! 🎉";
+        empty.querySelector("p").textContent     = currentFilter === "done" ? "No completed orders yet" : "No pending orders — all clear! 🎉";
         empty.querySelector("small").textContent = currentFilter === "done" ? "Orders marked done will appear here" : "New tickets will appear the moment customers order";
         stats.style.display = all.length ? "" : "none";
         return;
@@ -707,7 +634,7 @@
       grid.innerHTML = visible.map(function (e) { return buildTicketHTML(e[0], e[1]); }).join("");
     }
 
-    // Update elapsed timers every 30s without full re-render
+    // Update elapsed timers every 30s
     setInterval(function () {
       document.querySelectorAll(".elapsed[data-created]").forEach(function (el) {
         const created = el.dataset.created;
@@ -716,15 +643,15 @@
       });
     }, 30000);
 
-    // ── Firebase integration ──
-    let fsMod, db, kotCol;
+    // ── Firebase — no login required, uses restaurant ID from URL ──
+    let fsMod, db;
 
     window.markDone = async function (id) {
       const btn = document.querySelector("#tkt-" + id + " .btn-done");
       if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
       if (tickets[id]) tickets[id].status = "done";
       renderTickets();
-      if (fsMod && db && restaurantId) {
+      if (fsMod && db) {
         try {
           await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "done" });
         } catch (e) { console.error("Mark done failed", e); }
@@ -734,84 +661,37 @@
     window.undoTicket = async function (id) {
       if (tickets[id]) tickets[id].status = "pending";
       renderTickets();
-      if (fsMod && db && restaurantId) {
+      if (fsMod && db) {
         try {
           await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "pending" });
         } catch (e) { console.error("Undo failed", e); }
       }
     };
 
-    async function startKot(uid) {
-  setStatus("Loading KOT…", true);
-  try {
-    let rid = null;
-
-    // Try staffIndex first
-    try {
-      const idxSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", uid));
-      if (idxSnap.exists()) rid = idxSnap.data().restaurantId;
-    } catch (e) { console.warn("staffIndex read failed", e); }
-
-    // Fallback: use ?restaurant= URL param
-    if (!rid) {
-      rid = new URLSearchParams(window.location.search).get("restaurant");
-    }
-
-    // Fallback: try the staff subcollection directly if URL param exists
-    if (!rid) {
-      document.getElementById("login-overlay").classList.remove("hidden");
-      loginMsg("No restaurant linked to this account. Open KOT from your dashboard instead of directly.", true);
-      setStatus("Not linked", false);
-      return;
-    }
-
-    restaurantId = rid;
-    kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
-    const q = fsMod.query(kotCol, fsMod.orderBy("createdAt", "desc"), fsMod.limit(100));
-
-    fsMod.onSnapshot(q, function (snap) {
-      const isFirst = Object.keys(tickets).length === 0;
-      let hasNew = false;
-      snap.docChanges().forEach(function (change) {
-        const id   = change.doc.id;
-        const data = change.doc.data();
-        if (change.type === "added")    { tickets[id] = data; if (!isFirst && data.status !== "done") hasNew = true; }
-        if (change.type === "modified") { tickets[id] = data; }
-        if (change.type === "removed")  { delete tickets[id]; }
-      });
-      if (hasNew) playBeep();
-      renderTickets();
-      setStatus("Live · " + restaurantId, true);
-      document.getElementById("login-overlay").classList.add("hidden");
-      document.getElementById("stats-bar").style.display = "";
-    }, function (e) {
-      console.error("KOT snapshot failed", e);
-      setStatus("Sync error — check Firestore rules", false);
-    });
-
-  } catch (e) {
-    console.error("KOT start failed", e);
-    setStatus("Error: " + e.message, false);
-    document.getElementById("login-overlay").classList.remove("hidden");
-    loginMsg("Sign-in failed: " + e.message, true);
-  }
-}
-
-    async function bootFirebase() {
-      if (!window.SMARTSERVE_FIREBASE_CONFIG || !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
-          window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
-        // No Firebase — show local banner, skip login
-        document.getElementById("local-banner").style.display = "";
-        document.getElementById("login-overlay").classList.add("hidden");
-        setStatus("Local prototype", false);
+    async function startKot() {
+      // No restaurant ID → show helpful message
+      if (!restaurantId) {
+        document.getElementById("no-restaurant-msg").style.display = "";
+        document.getElementById("empty-state").style.display = "none";
+        setStatus("No restaurant ID", false);
         return;
       }
 
-      loginMsg("Connecting to Firebase…");
+      // No Firebase config → nothing to listen to
+      if (!window.SMARTSERVE_FIREBASE_CONFIG ||
+          !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
+          window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
+        setStatus("Firebase not configured", false);
+        document.getElementById("empty-state").querySelector("p").textContent = "Firebase not configured";
+        document.getElementById("empty-state").querySelector("small").textContent = "Set up firebase-config.js and refresh";
+        return;
+      }
+
+      setStatus("Connecting…", false);
+
       try {
-        const [appM, authM, fsM] = await Promise.all([
+        const [appM, fsM] = await Promise.all([
           import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-app.js"),
-          import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-auth.js"),
           import("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-firestore.js"),
         ]);
 
@@ -821,51 +701,41 @@
         try { app = appM.getApp("kot"); }
         catch { app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "kot"); }
 
-        const auth = authM.getAuth(app);
         db = fsM.getFirestore(app);
 
-        loginMsg("Ready. Sign in to start.");
+        const kotCol = fsM.collection(db, "restaurants", restaurantId, "kot");
+        const q      = fsM.query(kotCol, fsM.orderBy("createdAt", "desc"), fsM.limit(100));
 
-        // Auth state
-        authM.onAuthStateChanged(auth, function (user) {
-          if (user) {
-            startKot(user.uid);
-          } else {
-            document.getElementById("login-overlay").classList.remove("hidden");
-            loginMsg("Use your staff credentials.");
-          }
-        });
+        fsM.onSnapshot(q, function (snap) {
+          const isFirst = Object.keys(tickets).length === 0;
+          let hasNew = false;
 
-        // Login form
-        document.getElementById("kot-login-form").addEventListener("submit", async function (e) {
-          e.preventDefault();
-          const email = document.getElementById("kot-email").value.trim();
-          const pass  = document.getElementById("kot-password").value;
-          loginMsg("Signing in…");
-          document.getElementById("kot-sign-in-btn").disabled = true;
-          try {
-            await authM.signInWithEmailAndPassword(auth, email, pass);
-          } catch (err) {
-            const msgs = {
-              "auth/invalid-credential": "Invalid email or password.",
-              "auth/user-not-found":     "No account found.",
-              "auth/wrong-password":     "Wrong password.",
-            };
-            loginMsg(msgs[err.code] || err.message, true);
-            document.getElementById("kot-sign-in-btn").disabled = false;
-          }
+          snap.docChanges().forEach(function (change) {
+            const id   = change.doc.id;
+            const data = change.doc.data();
+            if (change.type === "added")    { tickets[id] = data; if (!isFirst && data.status !== "done") hasNew = true; }
+            if (change.type === "modified") { tickets[id] = data; }
+            if (change.type === "removed")  { delete tickets[id]; }
+          });
+
+          if (hasNew) playBeep();
+          renderTickets();
+          setStatus("Live · " + restaurantId, true);
+          document.getElementById("stats-bar").style.display = "";
+        }, function (e) {
+          console.error("KOT snapshot failed", e);
+          setStatus("Sync error — check Firestore rules", false);
         });
 
       } catch (e) {
-        console.error("KOT Firebase boot failed", e);
-        loginMsg("Firebase connection failed. Check firebase-config.js.", true);
-        setStatus("Setup failed", false);
+        console.error("KOT boot failed", e);
+        setStatus("Error: " + e.message, false);
       }
     }
 
-    // Initial render
+    // Boot
     renderTickets();
-    bootFirebase();
+    startKot();
   })();
   </script>
 
