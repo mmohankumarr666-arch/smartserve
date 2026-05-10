@@ -122,6 +122,25 @@
     }
     .btn-print:hover { opacity: .82; }
 
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border) 25%, var(--surface-2) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .loading-overlay {
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px 20px; flex-direction: column; gap: 12px; color: var(--muted);
+    }
+    .spinner {
+      width: 28px; height: 28px; border: 2.5px solid var(--border);
+      border-top-color: var(--text); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* ── Shell ── */
     .shell { max-width: 960px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; }
 
@@ -306,7 +325,6 @@
       <span id="restaurant-label" style="font-size:.78rem;color:var(--muted);font-family:var(--mono)"></span>
     </div>
     <div class="header-right">
-      <!-- Live sync indicator -->
       <div class="live-pill" id="live-pill">
         <span class="dot"></span>
         <span id="live-text">Connecting…</span>
@@ -314,7 +332,6 @@
       <input type="date" class="date-input" id="date-picker" />
       <button class="btn-secondary" id="btn-today">Today</button>
       <button class="btn-print" onclick="window.print()">🖨 Print</button>
-      <button class="btn-secondary" onclick="window.close()">✕ Close</button>
     </div>
   </div>
 
@@ -327,7 +344,7 @@
       <div class="stat-card green">
         <div class="lbl">Total Revenue</div>
         <div class="val" id="stat-revenue">₹0</div>
-        <div class="sub" id="stat-revenue-sub">Incl. service charge</div>
+        <div class="sub">Incl. service charge</div>
       </div>
       <div class="stat-card">
         <div class="lbl">Tables Closed</div>
@@ -360,7 +377,7 @@
         <div class="pnl-row muted"><span class="label">GST Collected (5%)</span><span class="amt" id="pnl-gst">₹0</span></div>
         <div class="pnl-row muted"><span class="label">(Payable to govt — not your income)</span><span class="amt"></span></div>
         <div class="pnl-sep"></div>
-        <div class="pnl-row total green"><span class="label">Net Revenue (yours)</span><span class="amt green" id="pnl-net" style="color:var(--green)">₹0</span></div>
+        <div class="pnl-row total"><span class="label">Net Revenue (yours)</span><span class="amt" id="pnl-net" style="color:var(--green)">₹0</span></div>
       </div>
 
       <!-- Profit Estimator -->
@@ -428,6 +445,7 @@
     const FBV = "10.12.5";
     let invoices   = [];
     let netRevenue = 0;
+    let isLoaded   = false;
 
     // ── Helpers ──
     function money(v) { return "₹" + Math.round(v).toLocaleString("en-IN"); }
@@ -452,6 +470,13 @@
         pill.classList.add("offline");
         text.textContent = "Offline";
       }
+    }
+
+    // Show a loading spinner while waiting for first Firebase snapshot
+    function showLoading() {
+      document.getElementById("date-label").textContent = "Connecting to Firebase…";
+      document.getElementById("inv-list").innerHTML =
+        '<div class="loading-overlay"><div class="spinner"></div><span style="font-size:.85rem">Loading invoices…</span></div>';
     }
 
     // ── Date picker ──
@@ -546,7 +571,7 @@
         hourly[h] += (inv.total || 0);
       });
       const max    = Math.max(...hourly, 1);
-      const active = hourly.map((v, i) => i >= 6 && i <= 23 ? { h: i, v } : null).filter(Boolean);
+      const active = hourly.map((v, i) => ({ h: i, v })).filter((_, i) => i >= 6);
       const chart  = document.getElementById("bar-chart");
       chart.innerHTML = active.map(function ({ h, v }) {
         const pct   = Math.round((v / max) * 92);
@@ -628,8 +653,8 @@
 
     // ── Firebase ──
     async function boot() {
-      if (!window.SMARTSERVE_FIREBASE_CONFIG || !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
-          window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
+      const cfg = window.SMARTSERVE_FIREBASE_CONFIG;
+      if (!cfg || !cfg.apiKey || cfg.apiKey.includes("PASTE_")) {
         document.getElementById("overlay").classList.add("hidden");
         document.getElementById("date-label").textContent = "Local mode — no Firebase configured";
         setLive(false);
@@ -645,7 +670,7 @@
 
         let app;
         try { app = appM.getApp("report"); }
-        catch { app = appM.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG, "report"); }
+        catch { app = appM.initializeApp(cfg, "report"); }
 
         const auth = authM.getAuth(app);
         const db   = fsM.getFirestore(app);
@@ -657,23 +682,41 @@
             return;
           }
           document.getElementById("overlay").classList.add("hidden");
+          showLoading(); // ← show spinner while snapshot loads
 
-          // Resolve restaurant ID
+          // ── FIX: use SMARTSERVE_RESTAURANT_ID from config if no URL param ──
           const urlRid = new URLSearchParams(window.location.search).get("restaurant");
-          let rid = urlRid;
+          let rid = urlRid || window.SMARTSERVE_RESTAURANT_ID; // ← KEY FIX
+
           if (!rid) {
-            const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
-            if (!idx.exists()) { setLive(false); return; }
-            rid = idx.data().restaurantId;
+            // Last resort: look up from staffIndex
+            try {
+              const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
+              if (!idx.exists()) {
+                console.error("No staffIndex doc for user", user.uid);
+                document.getElementById("date-label").textContent = "Error: restaurant not found. Add ?restaurant=YOUR_ID to URL.";
+                setLive(false);
+                return;
+              }
+              rid = idx.data().restaurantId;
+            } catch (e) {
+              console.error("staffIndex lookup failed", e);
+              setLive(false);
+              return;
+            }
           }
+
           document.getElementById("restaurant-label").textContent = rid;
 
-          // ── REAL-TIME LISTENER instead of one-time getDoc ──
-          // Every time "Close Table" is clicked on the dashboard,
-          // Firebase updates the state doc → this fires → report re-renders instantly.
+          // Real-time listener — fires every time "Close Table" writes to state
           const stateDoc = fsM.doc(db, "restaurants", rid, "smartserve", "state");
           fsM.onSnapshot(stateDoc, function (snap) {
-            if (!snap.exists()) { setLive(true); render(); return; }
+            if (!snap.exists()) {
+              console.warn("State doc doesn't exist yet at:", stateDoc.path);
+              setLive(true);
+              render();
+              return;
+            }
             const data = snap.data();
             invoices = (data.invoices || []).map(function (inv) {
               return Object.assign({}, inv, {
@@ -684,8 +727,9 @@
             setLive(true);
             render();
           }, function (e) {
-            console.error("Report snapshot failed", e);
+            console.error("Report snapshot failed:", e.code, e.message);
             setLive(false);
+            document.getElementById("date-label").textContent = "Connection error — check Firestore rules";
           });
         });
 
@@ -712,8 +756,8 @@
         });
 
       } catch (e) {
-        console.error("Report boot failed", e);
-        document.getElementById("login-msg").textContent = "Firebase connection failed.";
+        console.error("Report boot failed:", e);
+        document.getElementById("login-msg").textContent = "Firebase connection failed: " + e.message;
         document.getElementById("login-msg").className   = "login-msg error";
         setLive(false);
       }
