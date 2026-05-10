@@ -1032,3 +1032,163 @@ body.customer-page {
   padding: 2rem 0;
   text-align: center;
 }
+/* ── Paste this block inside your <style> tag in index.html ── */
+
+/* ── Server assignment row on each table card ── */
+.server-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9f8f5;
+  border-top: 1px solid #e4e2da;
+}
+.server-assign-icon { font-size: 1rem; flex-shrink: 0; }
+.server-assign-input {
+  flex: 1;
+  border: 1.5px solid #e4e2da;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  background: #fff;
+  color: #1a1a1a;
+  outline: none;
+  transition: border-color .15s;
+}
+.server-assign-input:focus  { border-color: #1a1a1a; }
+.server-assign-input::placeholder { color: #b0aca4; }
+
+/* ── Food-ready popup overlay ── */
+.fr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+.fr-overlay.fr-visible { opacity: 1; }
+
+.fr-modal {
+  background: #fff;
+  border-radius: 24px;
+  padding: 36px 32px 28px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0,0,0,.3);
+  position: relative;
+  transform: scale(.88);
+  transition: transform .32s cubic-bezier(.34,1.56,.64,1);
+  overflow: hidden;
+}
+.fr-overlay.fr-visible .fr-modal { transform: scale(1); }
+
+/* Animated green glow ring at top */
+.fr-glow-ring {
+  position: absolute;
+  top: -60px; left: 50%;
+  transform: translateX(-50%);
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,197,94,.35) 0%, transparent 70%);
+  animation: frPulse 1.8s ease-in-out infinite;
+}
+@keyframes frPulse {
+  0%,100% { transform: translateX(-50%) scale(1);   opacity: .8; }
+  50%      { transform: translateX(-50%) scale(1.2); opacity: .4; }
+}
+
+.fr-top-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #edf7f1;
+  color: #1e8a4a;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.fr-table-name {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.fr-dishes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+  position: relative;
+}
+.fr-dish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f5f4f0;
+  border: 1.5px solid #e4e2da;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.fr-dish-name { font-size: .95rem; font-weight: 700; color: #1a1a1a; }
+.fr-dish-qty  { font-size: .9rem;  font-weight: 700; color: #7a7670; font-family: monospace; }
+
+/* Server box */
+.fr-server-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  text-align: left;
+  position: relative;
+}
+.fr-server-box.has-server  { background: #edf7f1; border: 2px solid #86efac; }
+.fr-server-box.no-server   { background: #fef3c7; border: 2px solid #fcd34d; }
+.fr-server-icon { font-size: 1.5rem; flex-shrink: 0; }
+.fr-server-info { display: flex; flex-direction: column; gap: 2px; }
+.fr-server-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #7a7670; }
+.fr-server-name  { font-size: 1rem; font-weight: 800; color: #1a1a1a; }
+
+/* Got it button */
+.fr-gotit {
+  width: 100%;
+  padding: 14px 20px;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: .02em;
+  transition: opacity .15s, transform .1s;
+  position: relative;
+}
+.fr-gotit:hover  { opacity: .85; }
+.fr-gotit:active { transform: scale(.97); }
+
+.fr-more {
+  margin-top: 12px;
+  font-size: .78rem;
+  color: #7a7670;
+  font-weight: 600;
+}
