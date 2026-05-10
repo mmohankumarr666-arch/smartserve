@@ -15,20 +15,24 @@ const menu = [
   { id: "brownie",        name: "Sizzling Brownie",   desc: "Chocolate brownie, vanilla scoop",           price: 190, category: "dessert", available: true },
 ];
 
-// ─── Server roster ────────────────────────────────────────────────────────────
-// Maps tables to servers in rotation. Edit names here to match your staff.
-// Table 1 → serverRoster[0], Table 2 → serverRoster[1], etc. Cycles if more tables than servers.
-const serverRoster = [
-  "Arjun",
-  "Priya",
-  "Karthik",
-  "Meena",
-];
+// ─── Per-table server assignment ──────────────────────────────────────────────
+// tableServers[tableId] = "ServerName"  — set by owner via the table card input.
+// Persisted inside the Firebase state doc so it survives page reloads.
+const tableServers = {};
 
 function getServerForTable(tableId) {
-  const num = tableNumber(tableId) - 1; // 0-indexed
-  return serverRoster[num % serverRoster.length];
+  return tableServers[tableId] || "";
 }
+
+// Called from the inline input on each table card (oninput / onchange)
+window.assignServer = function(tableId, name) {
+  if (name && name.trim()) {
+    tableServers[tableId] = name.trim();
+  } else {
+    delete tableServers[tableId];
+  }
+  scheduleSave(); // persist without re-rendering (avoids input losing focus)
+};
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 function slugify(value) {
@@ -97,22 +101,14 @@ const state = {
   invoices: [],
 };
 
-// ─── Restaurant details (for printed bills) ───────────────────────────────────
-const restaurantDetails = {
-  name:    "",
-  address: "",
-  phone:   "",
-  gstin:   "",
-  email:   "",
-  fssai:   "",
-};
+const restaurantDetails = { name:"", address:"", phone:"", gstin:"", email:"", fssai:"" };
 
 const sync = {
   enabled: false, loaded: false, applyingRemote: false,
   saveTimer: null, stateDoc: null, detailsDoc: null,
   auth: null, authModule: null, firestoreModule: null, db: null, setDoc: null,
   pendingRegistration: false,
-  kotUnsubscribe: null,   // ← store KOT listener so we can clean it up if needed
+  kotUnsubscribe: null,
 };
 
 function ensureTable(tableId) {
@@ -148,6 +144,7 @@ function serializeState() {
     tableIds: state.tableIds,
     dashboardTable: state.dashboardTable,
     carts: state.carts,
+    tableServers: Object.assign({}, tableServers),   // ← persist server assignments
     sessions: Object.fromEntries(Object.entries(state.sessions).map(function(entry) {
       var id = entry[0], s = entry[1];
       return [id, Object.assign({}, s, {
@@ -165,10 +162,15 @@ function applyRemoteState(data) {
   sync.applyingRemote = true;
   menu.splice(0, menu.length);
   (Array.isArray(data.menu) ? data.menu : []).forEach(function(item) { menu.push(item); });
-  state.tableIds     = (Array.isArray(data.tableIds) && data.tableIds.length) ? data.tableIds : state.tableIds;
+  state.tableIds       = (Array.isArray(data.tableIds) && data.tableIds.length) ? data.tableIds : state.tableIds;
   state.dashboardTable = data.dashboardTable || state.tableIds[0] || "T1";
-  state.carts        = data.carts || {};
-  state.sessions     = Object.fromEntries(Object.entries(data.sessions || {}).map(function(entry) {
+  state.carts          = data.carts || {};
+
+  // Restore per-table server assignments
+  Object.keys(tableServers).forEach(function(k) { delete tableServers[k]; });
+  Object.assign(tableServers, data.tableServers || {});
+
+  state.sessions = Object.fromEntries(Object.entries(data.sessions || {}).map(function(entry) {
     var id = entry[0], s = entry[1];
     return [id, Object.assign({}, createSession(id), s, {
       openedAt: cloneDate(s.openedAt),
@@ -219,106 +221,117 @@ function updateRegisterMessage(text, isError) {
   el.classList.toggle("error", !!isError);
 }
 
-// ─── Food Ready Toast Notifications ──────────────────────────────────────────
-// Called when kitchen marks a KOT ticket as "done".
-// Shows a pop-up banner with table, dishes, and which server should collect.
+// ─── Food Ready POPUP ─────────────────────────────────────────────────────────
+// Full-screen modal popup when kitchen marks a KOT ticket done.
+// Staff MUST tap "Got it" — they cannot miss it.
+// Multiple alerts queue up and show one after the other.
 
 function playReadyBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Pleasant four-note "ding ding" — distinct from the order beep
-    [[1047, 0], [1319, 0.18], [1047, 0.36], [1568, 0.52]].forEach(function([freq, when]) {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+    [[1047,0],[1319,0.18],[1047,0.36],[1568,0.52]].forEach(function(pair) {
+      var freq = pair[0], when = pair[1];
+      var osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq, ctx.currentTime + when);
-      gain.gain.setValueAtTime(0,    ctx.currentTime + when);
-      gain.gain.linearRampToValueAtTime(0.28, ctx.currentTime + when + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + 0.38);
+      gain.gain.setValueAtTime(0, ctx.currentTime + when);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + when + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + 0.4);
       osc.start(ctx.currentTime + when);
-      osc.stop(ctx.currentTime + when + 0.4);
+      osc.stop(ctx.currentTime + when + 0.45);
     });
-  } catch (e) {}
+  } catch(e) {}
 }
 
-function showFoodReadyToast(tableId, items) {
-  // Get or create the toast container
-  var container = document.getElementById("food-ready-container");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "food-ready-container";
-    document.body.appendChild(container);
-  }
+var popupQueue = [];
+var popupOpen  = false;
 
-  const serverName = getServerForTable(tableId);
-  const dishTags   = items.map(function(item) {
-    return "<span>" + escapeHtml(item.name) + " \u00D7" + item.qty + "</span>";
-  }).join("");
+function showFoodReadyPopup(tableId, items) {
+  popupQueue.push({ tableId: tableId, items: items });
+  if (!popupOpen) drainPopupQueue();
+}
 
-  const toast = document.createElement("div");
-  toast.className = "food-ready-toast";
-  toast.innerHTML =
-    '<div class="toast-header">' +
-      '<div class="toast-badge"><div class="dot"></div>Kitchen Ready</div>' +
-      '<button class="toast-dismiss" title="Dismiss">\u2715</button>' +
-    '</div>' +
-    '<div class="toast-table">\uD83C\uDF7D\uFE0F ' + escapeHtml(tableLabel(tableId)) + '</div>' +
-    '<div class="toast-dishes">' + dishTags + '</div>' +
-    '<div class="toast-server"><span class="icon">\uD83D\uDC64</span>Collect &amp; serve: <strong>' + escapeHtml(serverName) + '</strong></div>';
+function drainPopupQueue() {
+  if (!popupQueue.length) { popupOpen = false; return; }
+  popupOpen = true;
+  var job = popupQueue.shift();
+  openFoodReadyModal(job.tableId, job.items);
+}
 
-  container.prepend(toast);
+function openFoodReadyModal(tableId, items) {
   playReadyBeep();
 
-  function dismissToast() {
-    clearTimeout(toast._timer);
-    toast.style.transition = "opacity .25s, transform .25s";
-    toast.style.opacity    = "0";
-    toast.style.transform  = "translateX(60px)";
-    setTimeout(function() { toast.remove(); }, 260);
+  var server    = getServerForTable(tableId);
+  var hasServer = !!server;
+
+  var dishRows = items.map(function(item) {
+    return '<div class="fr-dish">'
+      + '<span class="fr-dish-name">' + escapeHtml(item.name) + '</span>'
+      + '<span class="fr-dish-qty">\u00D7' + (item.qty || 1) + '</span>'
+      + '</div>';
+  }).join("");
+
+  var moreLabel = popupQueue.length > 0
+    ? '<p class="fr-more">+' + popupQueue.length + ' more order' + (popupQueue.length > 1 ? 's' : '') + ' ready after this</p>'
+    : '';
+
+  var overlay = document.createElement("div");
+  overlay.className = "fr-overlay";
+  overlay.innerHTML =
+    '<div class="fr-modal" role="alertdialog" aria-modal="true" aria-label="Food ready">'
+    + '<div class="fr-glow-ring"></div>'
+    + '<div class="fr-top-badge">&#127869;&nbsp; Kitchen Ready!</div>'
+    + '<div class="fr-table-name">' + escapeHtml(tableLabel(tableId)) + '</div>'
+    + '<div class="fr-dishes">' + dishRows + '</div>'
+    + '<div class="fr-server-box ' + (hasServer ? 'has-server' : 'no-server') + '">'
+        + '<span class="fr-server-icon">' + (hasServer ? '&#128100;' : '&#9888;&#65039;') + '</span>'
+        + '<div class="fr-server-info">'
+            + '<span class="fr-server-label">' + (hasServer ? 'Collect &amp; serve' : 'No server assigned') + '</span>'
+            + '<span class="fr-server-name">' + escapeHtml(hasServer ? server : 'Assign a server on the table card') + '</span>'
+        + '</div>'
+    + '</div>'
+    + '<button class="fr-gotit" id="fr-gotit-btn">Got it &#10004;</button>'
+    + moreLabel
+    + '</div>';
+
+  document.body.appendChild(overlay);
+
+  // Animate in
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() { overlay.classList.add("fr-visible"); });
+  });
+
+  function close() {
+    overlay.classList.remove("fr-visible");
+    setTimeout(function() { overlay.remove(); drainPopupQueue(); }, 320);
   }
 
-  toast.querySelector(".toast-dismiss").addEventListener("click", dismissToast);
-  toast._timer = setTimeout(dismissToast, 8000); // auto-dismiss after 8s
+  document.getElementById("fr-gotit-btn").addEventListener("click", close);
+  overlay.addEventListener("click", function(e) { if (e.target === overlay) close(); });
 }
 
-// ─── KOT "done" listener ──────────────────────────────────────────────────────
-// Watches the KOT collection for tickets that flip to status="done"
-// and fires a food-ready notification on the dashboard.
+// ─── KOT done listener ────────────────────────────────────────────────────────
 function startKotDoneListener(fsMod, db) {
-  // Unsubscribe any existing listener first (e.g. if restaurant switches)
-  if (sync.kotUnsubscribe) {
-    sync.kotUnsubscribe();
-    sync.kotUnsubscribe = null;
-  }
-
-  const kotCol = fsMod.collection(db, "restaurants", restaurantId, "kot");
-
-  // We only care about tickets that are currently "done" changing,
-  // so we listen to the whole collection and filter on "modified" events.
-  // We also track which IDs we've already notified so we don't double-fire.
+  if (sync.kotUnsubscribe) { sync.kotUnsubscribe(); sync.kotUnsubscribe = null; }
+  const kotCol       = fsMod.collection(db, "restaurants", restaurantId, "kot");
   const notifiedDone = new Set();
+  var   firstBatch   = true;
 
   sync.kotUnsubscribe = fsMod.onSnapshot(kotCol, function(snap) {
-    snap.docChanges().forEach(function(change) {
-      const data = change.doc.data();
-      const id   = change.doc.id;
+    // Skip the initial load — these are historical, already-done tickets
+    if (firstBatch) { firstBatch = false; return; }
 
-      // Only fire on a ticket becoming "done" for the first time
+    snap.docChanges().forEach(function(change) {
+      var data = change.doc.data();
+      var id   = change.doc.id;
       if (change.type === "modified" && data.status === "done" && !notifiedDone.has(id)) {
         notifiedDone.add(id);
-        showFoodReadyToast(data.tableId, data.items || []);
+        showFoodReadyPopup(data.tableId, data.items || []);
       }
-
-      // If a ticket is undone (back to pending) allow re-notification next time
-      if (data.status === "pending") {
-        notifiedDone.delete(id);
-      }
+      if (data.status === "pending") notifiedDone.delete(id); // allow re-notify if undone+redone
     });
-  }, function(e) {
-    console.error("KOT done listener failed", e);
-  });
+  }, function(e) { console.error("KOT done listener error", e); });
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -329,7 +342,7 @@ function renderDashboard() {
   document.querySelector("#invoice-count").textContent       = state.invoices.length;
   document.querySelector("#table-count-input").value         = state.tableIds.length;
   document.querySelector("#customer-preview-link").href      = customerUrl(state.dashboardTable);
-  document.querySelector("#kot-link").href = new URL("kot.html?restaurant=" + restaurantId, window.location.href).href;
+  document.querySelector("#kot-link").href    = new URL("kot.html?restaurant="          + restaurantId, window.location.href).href;
   document.querySelector("#report-link").href = new URL("sales-report.html?restaurant=" + restaurantId, window.location.href).href;
 
   var activeOrders = Object.values(state.sessions).reduce(function(s, ses) { return s + ses.orders.length; }, 0);
@@ -341,14 +354,39 @@ function renderDashboard() {
     var amount     = totals(lines).grand;
     var statusText = session.billRequested ? "Bill requested" : session.status === "idle" ? "Fresh" : "Serving";
     var badgeClass = session.billRequested ? "bill" : session.status === "idle" ? "idle" : "";
-    return '<article class="table-card ' + (state.dashboardTable === tableId ? "selected" : "") + " " + (session.billRequested ? "requested" : "") + " " + (session.status === "idle" ? "closed" : "") + '">' +
-      '<button class="table-select" data-view-table="' + tableId + '">' +
-        '<span><strong>' + tableLabel(tableId) + '</strong><small>' + lines.reduce(function(s,l){return s+l.qty;},0) + ' items \u00B7 ' + money(amount) + '</small></span>' +
-        '<span class="status-badge ' + badgeClass + '">' + statusText + '</span>' +
-      '</button>' +
-      '<img class="qr-image" src="' + qrUrl(tableId, 180) + '" alt="QR for ' + tableLabel(tableId) + '" />' +
-      '<div class="qr-actions"><a href="' + customerUrl(tableId) + '" target="_blank" rel="noopener">Open Menu</a><a href="' + qrUrl(tableId, 420) + '" target="_blank" rel="noopener">Print QR</a></div>' +
-      '</article>';
+    var assigned   = tableServers[tableId] || "";
+
+    return '<article class="table-card '
+        + (state.dashboardTable === tableId ? "selected" : "") + " "
+        + (session.billRequested ? "requested" : "") + " "
+        + (session.status === "idle" ? "closed" : "") + '">'
+
+      // ── Main table button ──
+      + '<button class="table-select" data-view-table="' + tableId + '">'
+          + '<span><strong>' + tableLabel(tableId) + '</strong>'
+          + '<small>' + lines.reduce(function(s,l){return s+l.qty;},0) + ' items \u00B7 ' + money(amount) + '</small></span>'
+          + '<span class="status-badge ' + badgeClass + '">' + statusText + '</span>'
+      + '</button>'
+
+      // ── Server assignment input ──
+      + '<div class="server-assign-row">'
+          + '<span class="server-assign-icon">&#128100;</span>'
+          + '<input'
+          + '  class="server-assign-input"'
+          + '  type="text"'
+          + '  placeholder="Assign server\u2026"'
+          + '  value="' + escapeHtml(assigned) + '"'
+          + '  oninput="assignServer(\'' + tableId + '\', this.value)"'
+          + '  onchange="assignServer(\'' + tableId + '\', this.value)"'
+          + '/>'
+      + '</div>'
+
+      + '<img class="qr-image" src="' + qrUrl(tableId, 180) + '" alt="QR for ' + tableLabel(tableId) + '" />'
+      + '<div class="qr-actions">'
+          + '<a href="' + customerUrl(tableId) + '" target="_blank" rel="noopener">Open Menu</a>'
+          + '<a href="' + qrUrl(tableId, 420) + '" target="_blank" rel="noopener">Print QR</a>'
+      + '</div>'
+      + '</article>';
   }).join("");
 }
 
@@ -358,12 +396,7 @@ function renderBill() {
   var detail  = document.querySelector("#bill-detail");
   document.querySelector("#bill-state").textContent   = tableLabel(state.dashboardTable);
   document.querySelector("#close-table-btn").disabled = lines.length === 0;
-
-  if (!lines.length) {
-    detail.className   = "bill-detail empty";
-    detail.textContent = "No orders for this table yet.";
-    return;
-  }
+  if (!lines.length) { detail.className = "bill-detail empty"; detail.textContent = "No orders for this table yet."; return; }
   var total = totals(lines);
   detail.className = "bill-detail";
   detail.innerHTML =
@@ -391,11 +424,7 @@ function renderMenuEditor() {
 
 function renderHistory() {
   var history = document.querySelector("#invoice-history");
-  if (!state.invoices.length) {
-    history.className   = "invoice-history empty";
-    history.textContent = "No closed tables yet.";
-    return;
-  }
+  if (!state.invoices.length) { history.className = "invoice-history empty"; history.textContent = "No closed tables yet."; return; }
   history.className = "invoice-history";
   history.innerHTML = state.invoices.map(function(inv) {
     var hasLines  = Array.isArray(inv.lines) && inv.lines.length;
@@ -403,24 +432,9 @@ function renderHistory() {
     var subtotal  = inv.subtotal != null ? inv.subtotal : inv.total;
     var service   = inv.service  != null ? inv.service  : 0;
     var tax       = inv.tax      != null ? inv.tax      : 0;
-    var lineRows  = hasLines ? inv.lines.map(function(l) {
-      return '<div class="inv-line"><span>' + l.qty + ' \u00D7 ' + escapeHtml(l.name) + '</span><span>' + money(l.qty * l.price) + '</span></div>';
-    }).join("") : "";
-    var breakdown = hasLines
-      ? '<div class="inv-breakdown">' + lineRows +
-        '<div class="inv-sep"></div>' +
-        '<div class="inv-line muted"><span>Subtotal</span><span>' + money(subtotal) + '</span></div>' +
-        '<div class="inv-line muted"><span>Service 4%</span><span>' + money(service) + '</span></div>' +
-        '<div class="inv-line muted"><span>GST 5%</span><span>' + money(tax) + '</span></div>' +
-        '<div class="inv-line grand"><span>Grand Total</span><span>' + money(inv.total) + '</span></div>' +
-        '</div>'
-      : "";
-    return '<div class="history-invoice">' +
-      '<button class="history-summary" data-toggle-invoice="' + inv.id + '" type="button">' +
-        '<div class="history-summary-left"><strong>' + inv.id + '</strong>' +
-        '<span class="history-meta">' + tableLabel(inv.tableId) + ' \u00B7 ' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + ' \u00B7 ' + inv.closedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span></div>' +
-        '<div class="history-summary-right"><strong>' + money(inv.total) + '</strong><span class="inv-chevron">\u25BE</span></div>' +
-      '</button>' + breakdown + '</div>';
+    var lineRows  = hasLines ? inv.lines.map(function(l) { return '<div class="inv-line"><span>' + l.qty + ' \u00D7 ' + escapeHtml(l.name) + '</span><span>' + money(l.qty * l.price) + '</span></div>'; }).join("") : "";
+    var breakdown = hasLines ? '<div class="inv-breakdown">' + lineRows + '<div class="inv-sep"></div><div class="inv-line muted"><span>Subtotal</span><span>' + money(subtotal) + '</span></div><div class="inv-line muted"><span>Service 4%</span><span>' + money(service) + '</span></div><div class="inv-line muted"><span>GST 5%</span><span>' + money(tax) + '</span></div><div class="inv-line grand"><span>Grand Total</span><span>' + money(inv.total) + '</span></div></div>' : "";
+    return '<div class="history-invoice"><button class="history-summary" data-toggle-invoice="' + inv.id + '" type="button"><div class="history-summary-left"><strong>' + inv.id + '</strong><span class="history-meta">' + tableLabel(inv.tableId) + ' \u00B7 ' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + ' \u00B7 ' + inv.closedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span></div><div class="history-summary-right"><strong>' + money(inv.total) + '</strong><span class="inv-chevron">\u25BE</span></div></button>' + breakdown + '</div>';
   }).join("");
 }
 
@@ -433,12 +447,7 @@ function renderDetailsForm() {
   document.querySelector("#detail-fssai").value   = restaurantDetails.fssai   || "";
 }
 
-function renderAll() {
-  renderDashboard();
-  renderBill();
-  renderMenuEditor();
-  renderHistory();
-}
+function renderAll() { renderDashboard(); renderBill(); renderMenuEditor(); renderHistory(); }
 
 // ─── Menu form ────────────────────────────────────────────────────────────────
 function resetMenuForm() {
@@ -451,7 +460,6 @@ function resetMenuForm() {
   document.querySelector("#menu-available").checked         = true;
   document.querySelector("#save-menu-item-btn").textContent = "Add Item";
 }
-
 function editMenuItem(id) {
   var item = getItem(id); if (!item) return;
   state.editingMenuId = id;
@@ -464,31 +472,22 @@ function editMenuItem(id) {
   document.querySelector("#save-menu-item-btn").textContent = "Save Changes";
   document.querySelector("#menu-name").focus();
 }
-
 function saveMenuItem(event) {
   event.preventDefault();
-  var name      = document.querySelector("#menu-name").value.trim();
-  var price     = Number(document.querySelector("#menu-price").value);
-  var category  = document.querySelector("#menu-category").value;
-  var desc      = document.querySelector("#menu-desc").value.trim();
-  var available = document.querySelector("#menu-available").checked;
+  var name = document.querySelector("#menu-name").value.trim(), price = Number(document.querySelector("#menu-price").value),
+      category = document.querySelector("#menu-category").value, desc = document.querySelector("#menu-desc").value.trim(),
+      available = document.querySelector("#menu-available").checked;
   if (!name || !desc || !Number.isFinite(price) || price <= 0) return;
-  if (state.editingMenuId) {
-    var item = getItem(state.editingMenuId);
-    if (item) Object.assign(item, { name: name, price: Math.round(price), category: category, desc: desc, available: available });
-  } else {
-    menu.push({ id: uniqueMenuId(name), name: name, price: Math.round(price), category: category, desc: desc, available: available });
-  }
+  if (state.editingMenuId) { var item = getItem(state.editingMenuId); if (item) Object.assign(item, { name, price: Math.round(price), category, desc, available }); }
+  else menu.push({ id: uniqueMenuId(name), name, price: Math.round(price), category, desc, available });
   resetMenuForm(); renderAndSave();
 }
-
 function toggleMenuItem(id) {
   var item = getItem(id); if (!item) return;
   item.available = !item.available;
   Object.values(state.carts).forEach(function(cart) { if (!item.available) delete cart[id]; });
   renderAndSave();
 }
-
 function deleteMenuItem(id) {
   var index = menu.findIndex(function(item) { return item.id === id; });
   if (index === -1) return;
@@ -500,185 +499,77 @@ function deleteMenuItem(id) {
 
 // ─── Table management ─────────────────────────────────────────────────────────
 function closeTable() {
-  var session = state.sessions[state.dashboardTable];
-  var lines   = sessionLines(session);
+  var session = state.sessions[state.dashboardTable], lines = sessionLines(session);
   if (!lines.length) return;
   var total = totals(lines);
-  state.invoices.unshift({
-    id:        "INV-" + String(state.invoices.length + 1).padStart(3, "0"),
-    tableId:   state.dashboardTable,
-    itemCount: lines.reduce(function(s, l) { return s + l.qty; }, 0),
-    lines:     lines.map(function(l) { return { id: l.id, name: l.name, price: l.price, qty: l.qty }; }),
-    subtotal:  total.subtotal,
-    service:   total.service,
-    tax:       total.tax,
-    total:     total.grand,
-    closedAt:  new Date(),
-  });
+  state.invoices.unshift({ id: "INV-" + String(state.invoices.length + 1).padStart(3, "0"), tableId: state.dashboardTable, itemCount: lines.reduce(function(s,l){return s+l.qty;},0), lines: lines.map(function(l){return{id:l.id,name:l.name,price:l.price,qty:l.qty};}), subtotal: total.subtotal, service: total.service, tax: total.tax, total: total.grand, closedAt: new Date() });
   state.sessions[state.dashboardTable] = createSession(state.dashboardTable);
   state.carts[state.dashboardTable]    = {};
   renderAndSave();
 }
-
-function addTable() {
-  var tableId = nextTableId();
-  ensureTable(tableId);
-  state.dashboardTable = tableId;
-  renderAndSave();
-}
-
+function addTable() { var tableId = nextTableId(); ensureTable(tableId); state.dashboardTable = tableId; renderAndSave(); }
 function setTableCount(event) {
   event.preventDefault();
   var count = Math.max(1, Math.min(200, Math.floor(Number(document.querySelector("#table-count-input").value))));
   if (!Number.isFinite(count)) return;
-  var keepers = state.tableIds.filter(function(id) {
-    var s = state.sessions[id];
-    return tableNumber(id) <= count || s.orders.length > 0 || s.billRequested
-      || Object.values(state.carts[id] || {}).some(function(qty) { return qty > 0; });
-  });
+  var keepers = state.tableIds.filter(function(id) { var s = state.sessions[id]; return tableNumber(id) <= count || s.orders.length > 0 || s.billRequested || Object.values(state.carts[id]||{}).some(function(qty){return qty>0;}); });
   for (var i = 1; i <= count; i++) ensureTable("T" + i);
-  state.tableIds = Array.from(new Set(keepers.concat(state.tableIds.filter(function(id) { return tableNumber(id) <= count; }))))
-    .sort(function(a, b) { return tableNumber(a) - tableNumber(b); });
+  state.tableIds = Array.from(new Set(keepers.concat(state.tableIds.filter(function(id){return tableNumber(id)<=count;})))).sort(function(a,b){return tableNumber(a)-tableNumber(b);});
   if (!state.tableIds.includes(state.dashboardTable)) state.dashboardTable = state.tableIds[0];
   renderAndSave();
 }
-
 function showNotification(tableId, itemCount) {
   var notice = document.querySelector("#notification");
-  document.querySelector("#notification-text").textContent =
-    tableLabel(tableId) + " placed " + itemCount + " item" + (itemCount === 1 ? "" : "s") + ".";
+  document.querySelector("#notification-text").textContent = tableLabel(tableId) + " placed " + itemCount + " item" + (itemCount === 1 ? "" : "s") + ".";
   notice.classList.remove("hidden");
-  document.querySelector("#beep").play().catch(function() {});
+  document.querySelector("#beep").play().catch(function(){});
   clearTimeout(showNotification.timer);
-  showNotification.timer = setTimeout(function() { notice.classList.add("hidden"); }, 3200);
+  showNotification.timer = setTimeout(function(){ notice.classList.add("hidden"); }, 3200);
 }
 
 // ─── Print Bill ───────────────────────────────────────────────────────────────
 function printBill() {
-  var session = state.sessions[state.dashboardTable];
-  var lines   = sessionLines(session);
+  var session = state.sessions[state.dashboardTable], lines = sessionLines(session);
   if (!lines.length) { alert("No orders on this table yet."); return; }
-  var total   = totals(lines);
-  var now     = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-
-  var billName    = restaurantDetails.name    || restaurantId.replace(/-/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-  var billAddress = restaurantDetails.address || "";
-  var billPhone   = restaurantDetails.phone   || "";
-  var billGstin   = restaurantDetails.gstin   || "";
-  var billEmail   = restaurantDetails.email   || "";
-  var billFssai   = restaurantDetails.fssai   || "";
-
-  var invoiceNum  = "INV-" + String(state.invoices.length + 1).padStart(3, "0");
-
-  var rows = lines.map(function(l) {
-    return "<tr><td>" + escapeHtml(l.name) + "</td><td style='text-align:center'>" + l.qty +
-           "</td><td style='text-align:right'>" + money(l.price) +
-           "</td><td style='text-align:right'>" + money(l.price * l.qty) + "</td></tr>";
-  }).join("");
-
-  var css = [
-    "body{font-family:monospace;font-size:13px;padding:24px;color:#111;max-width:380px;margin:auto}",
-    "h2{text-align:center;font-size:16px;margin-bottom:2px}",
-    ".sub{text-align:center;color:#666;font-size:11px;margin-bottom:4px}",
-    ".inv-no{text-align:center;font-size:11px;font-weight:700;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}",
-    "table{width:100%;border-collapse:collapse;margin-bottom:12px}",
-    "th{border-bottom:2px solid #111;padding:4px 0;font-size:11px;text-align:left}",
-    "th:not(:first-child){text-align:center} th:last-child{text-align:right}",
-    "td{padding:3px 0;vertical-align:top}",
-    ".sep{border-top:1px dashed #999;margin:8px 0}",
-    ".row{display:flex;justify-content:space-between;padding:2px 0}",
-    ".row.grand{font-weight:bold;font-size:15px;border-top:2px solid #111;margin-top:4px;padding-top:6px}",
-    ".footer{text-align:center;margin-top:16px;font-size:11px;color:#888;border-top:1px dashed #ccc;padding-top:10px}",
-    ".footer p{margin:2px 0}",
-    "@media print{body{padding:0}}"
-  ].join("");
-
+  var total = totals(lines), now = new Date().toLocaleString("en-IN", { dateStyle:"medium", timeStyle:"short" });
+  var billName = restaurantDetails.name || restaurantId.replace(/-/g," ").replace(/\b\w/g,function(c){return c.toUpperCase();});
+  var invoiceNum = "INV-" + String(state.invoices.length + 1).padStart(3, "0");
+  var rows = lines.map(function(l){ return "<tr><td>"+escapeHtml(l.name)+"</td><td style='text-align:center'>"+l.qty+"</td><td style='text-align:right'>"+money(l.price)+"</td><td style='text-align:right'>"+money(l.price*l.qty)+"</td></tr>"; }).join("");
+  var css = "body{font-family:monospace;font-size:13px;padding:24px;color:#111;max-width:380px;margin:auto}h2{text-align:center;font-size:16px;margin-bottom:2px}.sub{text-align:center;color:#666;font-size:11px;margin-bottom:4px}.inv-no{text-align:center;font-size:11px;font-weight:700;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{border-bottom:2px solid #111;padding:4px 0;font-size:11px;text-align:left}th:not(:first-child){text-align:center}th:last-child{text-align:right}td{padding:3px 0;vertical-align:top}.sep{border-top:1px dashed #999;margin:8px 0}.row{display:flex;justify-content:space-between;padding:2px 0}.row.grand{font-weight:bold;font-size:15px;border-top:2px solid #111;margin-top:4px;padding-top:6px}.footer{text-align:center;margin-top:16px;font-size:11px;color:#888;border-top:1px dashed #ccc;padding-top:10px}.footer p{margin:2px 0}@media print{body{padding:0}}";
   var headerLines = "";
-  if (billAddress) headerLines += "<div class='sub'>" + escapeHtml(billAddress).replace(/\n/g, "<br>") + "</div>";
-  if (billPhone)   headerLines += "<div class='sub'>Ph: " + escapeHtml(billPhone) + "</div>";
-  if (billEmail)   headerLines += "<div class='sub'>" + escapeHtml(billEmail) + "</div>";
-  if (billGstin)   headerLines += "<div class='sub'>GSTIN: " + escapeHtml(billGstin.toUpperCase()) + "</div>";
-  if (billFssai)   headerLines += "<div class='sub'>FSSAI: " + escapeHtml(billFssai) + "</div>";
-
-  var html = "<!doctype html><html><head><meta charset='utf-8'>"
-    + "<title>Bill - " + invoiceNum + "</title><style>" + css + "</style></head><body>"
-    + "<h2>" + escapeHtml(billName) + "</h2>"
-    + headerLines
-    + "<div class='inv-no'>" + invoiceNum + " &nbsp;|&nbsp; " + tableLabel(state.dashboardTable) + " &nbsp;|&nbsp; " + now + "</div>"
-    + "<table><thead><tr>"
-    + "<th>Item</th><th style='text-align:center'>Qty</th>"
-    + "<th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th>"
-    + "</tr></thead><tbody>" + rows + "</tbody></table>"
-    + "<div class='sep'></div>"
-    + "<div class='row'><span>Subtotal</span><span>" + money(total.subtotal) + "</span></div>"
-    + "<div class='row'><span>Service charge (4%)</span><span>" + money(total.service) + "</span></div>"
-    + "<div class='row'><span>GST (5%)</span><span>" + money(total.tax) + "</span></div>"
-    + "<div class='row grand'><span>Total</span><span>" + money(total.grand) + "</span></div>"
-    + "<div class='footer'><p>Thank you for dining with us!</p><p>Powered by SmartServe</p></div>"
-    + "<scr" + "ipt>window.onload=function(){window.print();}</" + "script>"
-    + "</body></html>";
-
-  var win = window.open("", "_blank", "width=420,height=680");
-  win.document.write(html);
-  win.document.close();
+  if (restaurantDetails.address) headerLines += "<div class='sub'>"+escapeHtml(restaurantDetails.address).replace(/\n/g,"<br>")+"</div>";
+  if (restaurantDetails.phone)   headerLines += "<div class='sub'>Ph: "+escapeHtml(restaurantDetails.phone)+"</div>";
+  if (restaurantDetails.email)   headerLines += "<div class='sub'>"+escapeHtml(restaurantDetails.email)+"</div>";
+  if (restaurantDetails.gstin)   headerLines += "<div class='sub'>GSTIN: "+escapeHtml(restaurantDetails.gstin.toUpperCase())+"</div>";
+  if (restaurantDetails.fssai)   headerLines += "<div class='sub'>FSSAI: "+escapeHtml(restaurantDetails.fssai)+"</div>";
+  var html = "<!doctype html><html><head><meta charset='utf-8'><title>Bill - "+invoiceNum+"</title><style>"+css+"</style></head><body><h2>"+escapeHtml(billName)+"</h2>"+headerLines+"<div class='inv-no'>"+invoiceNum+" &nbsp;|&nbsp; "+tableLabel(state.dashboardTable)+" &nbsp;|&nbsp; "+now+"</div><table><thead><tr><th>Item</th><th style='text-align:center'>Qty</th><th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th></tr></thead><tbody>"+rows+"</tbody></table><div class='sep'></div><div class='row'><span>Subtotal</span><span>"+money(total.subtotal)+"</span></div><div class='row'><span>Service charge (4%)</span><span>"+money(total.service)+"</span></div><div class='row'><span>GST (5%)</span><span>"+money(total.tax)+"</span></div><div class='row grand'><span>Total</span><span>"+money(total.grand)+"</span></div><div class='footer'><p>Thank you for dining with us!</p><p>Powered by SmartServe</p></div><scr"+"ipt>window.onload=function(){window.print();}</scr"+"ipt></body></html>";
+  var win = window.open("","_blank","width=420,height=680"); win.document.write(html); win.document.close();
 }
 
-// ─── Restaurant details — save & load ─────────────────────────────────────────
+// ─── Restaurant details ────────────────────────────────────────────────────────
 async function saveRestaurantDetails(event) {
   event.preventDefault();
-  restaurantDetails.name    = document.querySelector("#detail-name").value.trim();
-  restaurantDetails.address = document.querySelector("#detail-address").value.trim();
-  restaurantDetails.phone   = document.querySelector("#detail-phone").value.trim();
-  restaurantDetails.gstin   = document.querySelector("#detail-gstin").value.trim().toUpperCase();
-  restaurantDetails.email   = document.querySelector("#detail-email").value.trim();
-  restaurantDetails.fssai   = document.querySelector("#detail-fssai").value.trim();
-
+  restaurantDetails.name = document.querySelector("#detail-name").value.trim(); restaurantDetails.address = document.querySelector("#detail-address").value.trim(); restaurantDetails.phone = document.querySelector("#detail-phone").value.trim(); restaurantDetails.gstin = document.querySelector("#detail-gstin").value.trim().toUpperCase(); restaurantDetails.email = document.querySelector("#detail-email").value.trim(); restaurantDetails.fssai = document.querySelector("#detail-fssai").value.trim();
   var msg = document.querySelector("#details-save-msg");
-
   if (sync.enabled && sync.detailsDoc && sync.setDoc) {
-    try {
-      await sync.setDoc(sync.detailsDoc, Object.assign({}, restaurantDetails, { updatedAt: new Date().toISOString() }), { merge: true });
-      msg.textContent = "Saved to Firebase \u2713";
-    } catch (e) {
-      console.error("Details save failed", e);
-      msg.textContent = "Save failed \u2014 check connection.";
-    }
-  } else {
-    msg.textContent = "Saved locally \u2713";
-  }
-  setTimeout(function() { msg.textContent = ""; }, 3000);
+    try { await sync.setDoc(sync.detailsDoc, Object.assign({}, restaurantDetails, { updatedAt: new Date().toISOString() }), { merge: true }); msg.textContent = "Saved to Firebase \u2713"; }
+    catch (e) { console.error("Details save failed", e); msg.textContent = "Save failed."; }
+  } else { msg.textContent = "Saved locally \u2713"; }
+  setTimeout(function(){ msg.textContent = ""; }, 3000);
 }
-
 async function loadRestaurantDetails(fsMod, db) {
   if (!sync.detailsDoc) return;
   try {
     var snap = await fsMod.getDoc(sync.detailsDoc);
-    if (snap.exists()) {
-      var data = snap.data();
-      Object.assign(restaurantDetails, {
-        name:    data.name    || "",
-        address: data.address || "",
-        phone:   data.phone   || "",
-        gstin:   data.gstin   || "",
-        email:   data.email   || "",
-        fssai:   data.fssai   || "",
-      });
-      renderDetailsForm();
-    }
-  } catch (e) {
-    console.error("Details load failed", e);
-  }
+    if (snap.exists()) { var data = snap.data(); Object.assign(restaurantDetails, { name:data.name||"", address:data.address||"", phone:data.phone||"", gstin:data.gstin||"", email:data.email||"", fssai:data.fssai||"" }); renderDetailsForm(); }
+  } catch (e) { console.error("Details load failed", e); }
 }
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 async function connectFirebase() {
   if (!firebaseConfigIsReady()) {
-    document.body.classList.remove("auth-locked");
-    document.body.classList.add("auth-ready");
-    updateSyncStatus("Local prototype");
-    sync.loaded = true;
-    renderAll();
-    return;
+    document.body.classList.remove("auth-locked"); document.body.classList.add("auth-ready");
+    updateSyncStatus("Local prototype"); sync.loaded = true; renderAll(); return;
   }
   updateLoginMessage("Connecting to Firebase...");
   try {
@@ -687,285 +578,113 @@ async function connectFirebase() {
       import("https://www.gstatic.com/firebasejs/" + firebaseModuleVersion + "/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/" + firebaseModuleVersion + "/firebase-firestore.js"),
     ]);
-    const app  = appMod.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG);
-    const auth = authMod.getAuth(app);
-    const db   = fsMod.getFirestore(app);
-
-    sync.enabled         = true;
-    sync.auth            = auth;
-    sync.authModule      = authMod;
-    sync.firestoreModule = fsMod;
-    sync.db              = db;
-    sync.setDoc          = fsMod.setDoc;
-
+    const app = appMod.initializeApp(window.SMARTSERVE_FIREBASE_CONFIG);
+    const auth = authMod.getAuth(app), db = fsMod.getFirestore(app);
+    sync.enabled=true; sync.auth=auth; sync.authModule=authMod; sync.firestoreModule=fsMod; sync.db=db; sync.setDoc=fsMod.setDoc;
     updateLoginMessage("Ready. Please sign in.");
 
     authMod.onAuthStateChanged(auth, async function(user) {
       if (sync.pendingRegistration) return;
-
-      if (!user) {
-        document.body.classList.add("auth-locked");
-        document.body.classList.remove("auth-ready");
-        updateLoginMessage("Use your owner account to sign in.");
-        updateSyncStatus("Signed out");
-        return;
-      }
-
+      if (!user) { document.body.classList.add("auth-locked"); document.body.classList.remove("auth-ready"); updateLoginMessage("Use your owner account to sign in."); updateSyncStatus("Signed out"); return; }
       try {
         const indexSnap = await fsMod.getDoc(fsMod.doc(db, "staffIndex", user.uid));
-        if (!indexSnap.exists()) {
-          await authMod.signOut(auth);
-          updateLoginMessage("No restaurant found for this account. Contact support on WhatsApp: 8610741387", true);
-          return;
-        }
-
+        if (!indexSnap.exists()) { await authMod.signOut(auth); updateLoginMessage("No restaurant found. Contact: 8610741387", true); return; }
         const resolvedRestaurantId = indexSnap.data().restaurantId;
-
         const subSnap = await fsMod.getDoc(fsMod.doc(db, "subscriptions", resolvedRestaurantId));
-        if (!subSnap.exists()) {
-          await authMod.signOut(auth);
-          updateLoginMessage("No subscription found. Please complete payment to activate your account.", true);
-          return;
-        }
+        if (!subSnap.exists()) { await authMod.signOut(auth); updateLoginMessage("No subscription found. Complete payment.", true); return; }
         const sub = subSnap.data();
-        if (sub.status !== "active" || new Date(sub.expiryDate) < new Date()) {
-          await authMod.signOut(auth);
-          updateLoginMessage("Your account is pending activation. Please contact us on WhatsApp: 8610741387", true);
-          return;
-        }
-
-        restaurantId    = resolvedRestaurantId;
+        if (sub.status !== "active" || new Date(sub.expiryDate) < new Date()) { await authMod.signOut(auth); updateLoginMessage("Account pending activation. Contact: 8610741387", true); return; }
+        restaurantId = resolvedRestaurantId;
         sync.stateDoc   = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "state");
         sync.detailsDoc = fsMod.doc(db, "restaurants", restaurantId, "smartserve", "details");
-
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set("restaurant", restaurantId);
-        window.history.replaceState({}, "", newUrl.toString());
-
-        document.body.classList.remove("auth-locked");
-        document.body.classList.add("auth-ready");
+        const newUrl = new URL(window.location.href); newUrl.searchParams.set("restaurant", restaurantId); window.history.replaceState({}, "", newUrl.toString());
+        document.body.classList.remove("auth-locked"); document.body.classList.add("auth-ready");
         await loadDashboardState(fsMod, db);
-
-      } catch (e) {
-        console.error("Auth check failed", e);
-        updateLoginMessage("Sign-in check failed. Please try again.", true);
-        await authMod.signOut(auth).catch(function() {});
-      }
+      } catch (e) { console.error("Auth check failed", e); updateLoginMessage("Sign-in check failed.", true); await authMod.signOut(auth).catch(function(){}); }
     });
-
-  } catch (e) {
-    console.error("Firebase setup failed", e);
-    updateLoginMessage("Firebase setup failed. Check firebase-config.js.", true);
-    updateSyncStatus("Setup failed");
-    sync.loaded = true;
-  }
+  } catch (e) { console.error("Firebase setup failed", e); updateLoginMessage("Firebase setup failed.", true); updateSyncStatus("Setup failed"); sync.loaded = true; }
 }
 
 async function loadDashboardState(fsMod, db) {
   updateSyncStatus("Loading...");
   const snap = await fsMod.getDoc(sync.stateDoc);
-  if (snap.exists()) { applyRemoteState(snap.data()); }
-  else               { await sync.setDoc(sync.stateDoc, serializeState(), { merge: true }); }
-
+  if (snap.exists()) { applyRemoteState(snap.data()); } else { await sync.setDoc(sync.stateDoc, serializeState(), { merge: true }); }
   await loadRestaurantDetails(fsMod, db);
+  sync.loaded = true; updateSyncStatus("Firebase live"); updateLoginMessage("Signed in.");
 
-  sync.loaded = true;
-  updateSyncStatus("Firebase live");
-  updateLoginMessage("Signed in.");
+  fsMod.onSnapshot(sync.stateDoc, function(s) { if (!s.exists()) return; applyRemoteState(s.data()); updateSyncStatus("Firebase live"); }, function(e){ console.error("Sync failed",e); updateSyncStatus("Offline"); });
 
-  fsMod.onSnapshot(sync.stateDoc, function(s) {
-    if (!s.exists()) return;
-    applyRemoteState(s.data());
-    updateSyncStatus("Firebase live");
-  }, function(e) { console.error("Sync failed", e); updateSyncStatus("Offline"); });
-
-  const ordersCol    = fsMod.collection(db, "restaurants", restaurantId, "orders");
-  const pendingQuery = fsMod.query(ordersCol, fsMod.where("status", "==", "pending"));
-
-  fsMod.onSnapshot(pendingQuery, async function(snapshot) {
+  const ordersCol = fsMod.collection(db, "restaurants", restaurantId, "orders");
+  fsMod.onSnapshot(fsMod.query(ordersCol, fsMod.where("status","==","pending")), async function(snapshot) {
     for (const change of snapshot.docChanges()) {
       if (change.type !== "added") continue;
-      const data = change.doc.data();
-      const tableId = data.tableId, items = data.items, billRequested = data.billRequested;
+      const data = change.doc.data(), tableId = data.tableId, items = data.items, billRequested = data.billRequested;
       if (!tableId) continue;
       ensureTable(tableId);
-      if (billRequested) {
-        state.sessions[tableId].status        = "active";
-        state.sessions[tableId].billRequested = true;
-      } else if (items && items.length) {
-        const session = state.sessions[tableId];
-        session.status        = "active";
-        session.billRequested = false;
-        session.orders.push({ id: "ORD-" + (session.orders.length + 1), createdAt: new Date(), items: items });
-        showNotification(tableId, items.reduce(function(s, item) { return s + item.qty; }, 0));
-        fsMod.setDoc(
-          fsMod.doc(db, "restaurants", restaurantId, "kot", change.doc.id),
-          { tableId: tableId, items: items, createdAt: new Date().toISOString(), status: "pending" }
-        ).catch(function(e) { console.error("KOT write failed", e); });
+      if (billRequested) { state.sessions[tableId].status = "active"; state.sessions[tableId].billRequested = true; }
+      else if (items && items.length) {
+        const session = state.sessions[tableId]; session.status = "active"; session.billRequested = false;
+        session.orders.push({ id:"ORD-"+(session.orders.length+1), createdAt:new Date(), items:items });
+        showNotification(tableId, items.reduce(function(s,item){return s+item.qty;},0));
+        fsMod.setDoc(fsMod.doc(db,"restaurants",restaurantId,"kot",change.doc.id), { tableId:tableId, items:items, createdAt:new Date().toISOString(), status:"pending" }).catch(function(e){console.error("KOT write failed",e);});
       }
-      try { await fsMod.updateDoc(change.doc.ref, { status: "processed" }); }
-      catch (e) { console.error("Could not mark processed", e); }
+      try { await fsMod.updateDoc(change.doc.ref, { status:"processed" }); } catch(e){ console.error("Could not mark processed",e); }
       renderAndSave();
     }
-  }, function(e) { console.error("Orders listener failed", e); });
+  }, function(e){ console.error("Orders listener failed",e); });
 
-  // ── Start listening for kitchen "done" events to notify servers ──
+  // Watch KOT for "done" status → trigger food-ready popup on dashboard
   startKotDoneListener(fsMod, db);
 }
 
-// ─── Boot — wait for DOM ──────────────────────────────────────────────────────
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() {
-
   document.body.classList.add("auth-locked");
-
-  document.querySelector("#tab-login").addEventListener("click", function() {
-    document.querySelector("#tab-login").classList.add("active");
-    document.querySelector("#tab-register").classList.remove("active");
-    document.querySelector("#login-form").classList.remove("hidden");
-    document.querySelector("#register-form").classList.add("hidden");
-  });
-  document.querySelector("#tab-register").addEventListener("click", function() {
-    document.querySelector("#tab-register").classList.add("active");
-    document.querySelector("#tab-login").classList.remove("active");
-    document.querySelector("#register-form").classList.remove("hidden");
-    document.querySelector("#login-form").classList.add("hidden");
-  });
-
-  document.querySelector("#login-form").addEventListener("submit", async function(e) {
+  document.querySelector("#tab-login").addEventListener("click", function(){ document.querySelector("#tab-login").classList.add("active"); document.querySelector("#tab-register").classList.remove("active"); document.querySelector("#login-form").classList.remove("hidden"); document.querySelector("#register-form").classList.add("hidden"); });
+  document.querySelector("#tab-register").addEventListener("click", function(){ document.querySelector("#tab-register").classList.add("active"); document.querySelector("#tab-login").classList.remove("active"); document.querySelector("#register-form").classList.remove("hidden"); document.querySelector("#login-form").classList.add("hidden"); });
+  document.querySelector("#login-form").addEventListener("submit", async function(e){
     e.preventDefault();
-    if (!sync.auth || !sync.authModule) { updateLoginMessage("Firebase not ready yet, please wait.", true); return; }
-    const email    = document.querySelector("#staff-email").value.trim();
-    const password = document.querySelector("#staff-password").value;
+    if (!sync.auth||!sync.authModule){ updateLoginMessage("Firebase not ready.",true); return; }
+    const email=document.querySelector("#staff-email").value.trim(), pass=document.querySelector("#staff-password").value;
     updateLoginMessage("Signing in...");
-    try {
-      await sync.authModule.signInWithEmailAndPassword(sync.auth, email, password);
-    } catch (err) {
-      var msgs = {
-        "auth/user-not-found":     "No account found with this email.",
-        "auth/wrong-password":     "Incorrect password.",
-        "auth/invalid-credential": "Invalid email or password.",
-        "auth/invalid-email":      "Invalid email address.",
-      };
-      updateLoginMessage(msgs[err.code] || "Login failed. Check email and password.", true);
-    }
+    try { await sync.authModule.signInWithEmailAndPassword(sync.auth,email,pass); }
+    catch(err){ var msgs={"auth/user-not-found":"No account found.","auth/wrong-password":"Wrong password.","auth/invalid-credential":"Invalid email or password.","auth/invalid-email":"Invalid email."}; updateLoginMessage(msgs[err.code]||"Login failed.",true); }
   });
-
-  document.querySelector("#register-form").addEventListener("submit", async function(e) {
+  document.querySelector("#register-form").addEventListener("submit", async function(e){
     e.preventDefault();
-    if (!sync.auth || !sync.authModule || !sync.firestoreModule || !sync.db) {
-      updateRegisterMessage("Firebase not ready yet, please wait.", true); return;
-    }
-
-    const restaurantName = document.querySelector("#reg-restaurant").value.trim();
-    const ownerName      = document.querySelector("#reg-name").value.trim();
-    const email          = document.querySelector("#reg-email").value.trim();
-    const password       = document.querySelector("#reg-password").value;
-    const plan           = document.querySelector("#reg-plan").value;
-
-    if (!restaurantName || !ownerName) {
-      updateRegisterMessage("Please fill in all fields.", true); return;
-    }
-
-    const newRestaurantId = slugify(restaurantName);
-    updateRegisterMessage("Creating your account...");
-
+    if (!sync.auth||!sync.authModule||!sync.firestoreModule||!sync.db){ updateRegisterMessage("Firebase not ready.",true); return; }
+    const restaurantName=document.querySelector("#reg-restaurant").value.trim(), ownerName=document.querySelector("#reg-name").value.trim(), email=document.querySelector("#reg-email").value.trim(), password=document.querySelector("#reg-password").value, plan=document.querySelector("#reg-plan").value;
+    if (!restaurantName||!ownerName){ updateRegisterMessage("Please fill in all fields.",true); return; }
+    const newRestaurantId=slugify(restaurantName); updateRegisterMessage("Creating your account...");
     try {
-      sync.pendingRegistration = true;
-      const cred = await sync.authModule.createUserWithEmailAndPassword(sync.auth, email, password);
-
-      const staffDocData = {
-        role:         "owner",
-        name:         ownerName,
-        email:        email,
-        restaurantId: newRestaurantId,
-        createdAt:    new Date().toISOString(),
-      };
-
-      await sync.firestoreModule.setDoc(
-        sync.firestoreModule.doc(sync.db, "restaurants", newRestaurantId, "staff", cred.user.uid),
-        staffDocData
-      );
-
-      await sync.firestoreModule.setDoc(
-        sync.firestoreModule.doc(sync.db, "staffIndex", cred.user.uid),
-        { restaurantId: newRestaurantId, email: email, createdAt: new Date().toISOString() }
-      );
-
-      await sync.firestoreModule.setDoc(
-        sync.firestoreModule.doc(sync.db, "subscriptions", newRestaurantId),
-        {
-          restaurantId:   newRestaurantId,
-          restaurantName: restaurantName,
-          ownerName:      ownerName,
-          ownerEmail:     email,
-          plan:           plan,
-          startDate:      new Date().toISOString(),
-          expiryDate:     new Date().toISOString(),
-          status:         "pending",
-          createdAt:      new Date().toISOString(),
-        }
-      );
-
-      await sync.authModule.signOut(sync.auth);
-      sync.pendingRegistration = false;
-
-      const planLabel = plan === "yearly" ? "Yearly \u2014 \u20B99,999/year" : "Monthly \u2014 \u20B9999/month";
-      const waMessage = encodeURIComponent(
-        "Hi! I just registered on SmartServe.\n\n" +
-        "Restaurant: " + restaurantName + "\n" +
-        "Restaurant ID: " + newRestaurantId + "\n" +
-        "Owner: " + ownerName + "\n" +
-        "Email: " + email + "\n" +
-        "Plan: " + planLabel + "\n\n" +
-        "Please activate my account after payment. Thank you!"
-      );
-      const waUrl = "https://wa.me/918610741387?text=" + waMessage;
-
+      sync.pendingRegistration=true;
+      const cred=await sync.authModule.createUserWithEmailAndPassword(sync.auth,email,password);
+      await sync.firestoreModule.setDoc(sync.firestoreModule.doc(sync.db,"restaurants",newRestaurantId,"staff",cred.user.uid),{role:"owner",name:ownerName,email:email,restaurantId:newRestaurantId,createdAt:new Date().toISOString()});
+      await sync.firestoreModule.setDoc(sync.firestoreModule.doc(sync.db,"staffIndex",cred.user.uid),{restaurantId:newRestaurantId,email:email,createdAt:new Date().toISOString()});
+      await sync.firestoreModule.setDoc(sync.firestoreModule.doc(sync.db,"subscriptions",newRestaurantId),{restaurantId:newRestaurantId,restaurantName:restaurantName,ownerName:ownerName,ownerEmail:email,plan:plan,startDate:new Date().toISOString(),expiryDate:new Date().toISOString(),status:"pending",createdAt:new Date().toISOString()});
+      await sync.authModule.signOut(sync.auth); sync.pendingRegistration=false;
+      const planLabel=plan==="yearly"?"Yearly \u2014 \u20B99,999/year":"Monthly \u2014 \u20B9999/month";
+      const waMessage=encodeURIComponent("Hi! I just registered on SmartServe.\n\nRestaurant: "+restaurantName+"\nRestaurant ID: "+newRestaurantId+"\nOwner: "+ownerName+"\nEmail: "+email+"\nPlan: "+planLabel+"\n\nPlease activate my account after payment. Thank you!");
       updateRegisterMessage("Account created! Redirecting to WhatsApp...");
-      setTimeout(function () {
-        window.open(waUrl, "_blank");
-        document.querySelector("#tab-login").click();
-        updateLoginMessage(
-          "Account created! After payment is confirmed, sign in here. Your Restaurant ID: " + newRestaurantId,
-          false
-        );
-      }, 1200);
-
-    } catch (err) {
-      sync.pendingRegistration = false;
-      var msgs = {
-        "auth/email-already-in-use": "This email is already registered. Please sign in.",
-        "auth/invalid-email":        "Invalid email address.",
-        "auth/weak-password":        "Password must be at least 6 characters.",
-      };
-      updateRegisterMessage(msgs[err.code] || ("Registration failed: " + err.message), true);
-    }
+      setTimeout(function(){ window.open("https://wa.me/918610741387?text="+waMessage,"_blank"); document.querySelector("#tab-login").click(); updateLoginMessage("Account created! Sign in after payment. Restaurant ID: "+newRestaurantId); },1200);
+    } catch(err){ sync.pendingRegistration=false; var msgs={"auth/email-already-in-use":"Email already registered.","auth/invalid-email":"Invalid email.","auth/weak-password":"Password min 6 chars."}; updateRegisterMessage(msgs[err.code]||("Registration failed: "+err.message),true); }
   });
-
-  document.querySelector("#logout-btn").addEventListener("click", async function() {
-    if (sync.authModule && sync.auth) await sync.authModule.signOut(sync.auth);
+  document.querySelector("#logout-btn").addEventListener("click", async function(){ if(sync.authModule&&sync.auth) await sync.authModule.signOut(sync.auth); });
+  var printBtn=document.querySelector("#print-bill-btn"); if(printBtn) printBtn.addEventListener("click",printBill);
+  document.querySelector("#menu-form").addEventListener("submit",saveMenuItem);
+  document.querySelector("#cancel-menu-edit-btn").addEventListener("click",function(){resetMenuForm();renderAll();});
+  document.querySelector("#table-count-form").addEventListener("submit",setTableCount);
+  document.querySelector("#add-table-btn").addEventListener("click",addTable);
+  document.querySelector("#close-table-btn").addEventListener("click",closeTable);
+  document.querySelector("#restaurant-details-form").addEventListener("submit",saveRestaurantDetails);
+  document.addEventListener("click",function(event){
+    var target=event.target.closest("button"); if(!target) return;
+    if(target.dataset.viewTable){state.dashboardTable=target.dataset.viewTable;renderAndSave();}
+    if(target.dataset.editMenu)   editMenuItem(target.dataset.editMenu);
+    if(target.dataset.toggleMenu) toggleMenuItem(target.dataset.toggleMenu);
+    if(target.dataset.deleteMenu) deleteMenuItem(target.dataset.deleteMenu);
+    if(target.dataset.toggleInvoice){var inv=target.closest(".history-invoice");if(inv)inv.classList.toggle("expanded");}
   });
-
-  var printBtn = document.querySelector("#print-bill-btn");
-  if (printBtn) printBtn.addEventListener("click", printBill);
-  document.querySelector("#menu-form").addEventListener("submit", saveMenuItem);
-  document.querySelector("#cancel-menu-edit-btn").addEventListener("click", function() { resetMenuForm(); renderAll(); });
-  document.querySelector("#table-count-form").addEventListener("submit", setTableCount);
-  document.querySelector("#add-table-btn").addEventListener("click", addTable);
-  document.querySelector("#close-table-btn").addEventListener("click", closeTable);
-
-  document.querySelector("#restaurant-details-form").addEventListener("submit", saveRestaurantDetails);
-
-  document.addEventListener("click", function(event) {
-    var target = event.target.closest("button");
-    if (!target) return;
-    if (target.dataset.viewTable)     { state.dashboardTable = target.dataset.viewTable; renderAndSave(); }
-    if (target.dataset.editMenu)      editMenuItem(target.dataset.editMenu);
-    if (target.dataset.toggleMenu)    toggleMenuItem(target.dataset.toggleMenu);
-    if (target.dataset.deleteMenu)    deleteMenuItem(target.dataset.deleteMenu);
-    if (target.dataset.toggleInvoice) { var inv = target.closest(".history-invoice"); if (inv) inv.classList.toggle("expanded"); }
-  });
-
   renderAll();
   connectFirebase();
 });
