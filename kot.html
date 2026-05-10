@@ -427,13 +427,25 @@
   (function () {
     const FBV = "10.12.5";
 
-    const tickets        = {};
-    // ── FIX: localOverrides stores the status WE set locally (done/pending).
-    // The snapshot listener will NEVER overwrite a ticket whose status is in here.
-    // We only clear an entry when Firestore confirms our write succeeded.
-    const localOverrides = {};
-    let   currentFilter  = "pending";
-    let   soundEnabled   = true;
+    /*
+     * tickets{}  — source of truth for rendering.
+     *              Each value is the raw Firestore doc data BUT with
+     *              .status overridden by whatever WE set locally.
+     *
+     * The key insight of this fix:
+     *   We store OUR intended status directly inside tickets[id].status
+     *   before the Firestore write, and we NEVER let the snapshot overwrite
+     *   tickets[id].status while a local change is in flight.
+     *
+     *   inFlight  — Set of IDs currently being written to Firestore.
+     *               While an ID is in this set the snapshot handler skips it
+     *               entirely (doesn't touch tickets[id] at all).
+     */
+    const tickets  = {};
+    const inFlight = new Set();
+    let   initialLoad   = true;   // true until the very first snapshot batch lands
+    let   currentFilter = "pending";
+    let   soundEnabled  = true;
 
     const restaurantId = new URLSearchParams(window.location.search).get("restaurant");
 
@@ -587,72 +599,55 @@
     // ── Firebase ──
     let fsMod, db;
 
-    window.markDone = async function (id) {
-      // 1. Set local override FIRST — snapshot listener will respect this
-      localOverrides[id] = "done";
+    // ── setTicketStatus: single place that handles both markDone and undo ──
+    async function setTicketStatus(id, newStatus) {
+      if (!tickets[id]) return;
 
-      // 2. Update local ticket state immediately
-      if (tickets[id]) tickets[id].status = "done";
+      // 1. Lock this ticket against snapshot overwrites
+      inFlight.add(id);
 
-      // 3. Animate the card briefly before re-render
+      // 2. Apply new status locally right now
+      tickets[id].status = newStatus;
+
+      // 3. Brief green/completing flash on the card
       const card = document.getElementById("tkt-" + id);
       if (card) {
-        const btn = card.querySelector(".btn-done");
+        const btn = card.querySelector(".btn-done, .btn-undo");
         if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
-        card.classList.remove("new-order");
-        card.classList.add("completing");
+        if (newStatus === "done") {
+          card.classList.remove("new-order");
+          card.classList.add("completing");
+        }
       }
 
-      // 4. Short delay so user sees green flash, then re-render
-      await new Promise(function (r) { setTimeout(r, 400); });
+      // 4. Short visual pause then re-render with the new status
+      await new Promise(function (r) { setTimeout(r, 350); });
       renderTickets();
 
-      // 5. Persist to Firestore
+      // 5. Write to Firestore (if connected)
       if (fsMod && db) {
         try {
           await fsMod.updateDoc(
             fsMod.doc(db, "restaurants", restaurantId, "kot", id),
-            { status: "done" }
+            { status: newStatus }
           );
-          // 6. Only clear the override AFTER Firestore confirms the write.
-          //    Any snapshot that arrived during the write was already ignored.
-          delete localOverrides[id];
-        } catch (e) {
-          console.error("Mark done failed", e);
-          // Revert on failure
-          delete localOverrides[id];
-          if (tickets[id]) tickets[id].status = "pending";
+          // Write confirmed — unlock. The confirming snapshot will arrive
+          // but tickets[id].status is already correct so it doesn't matter.
+        } catch (err) {
+          console.error("Firestore write failed:", err);
+          // Revert the local status so the UI is honest about the failure
+          tickets[id].status = newStatus === "done" ? "pending" : "done";
           renderTickets();
+          alert("Could not save — check your connection.\n\n" + err.message);
         }
-      } else {
-        // No Firebase configured — still clear override so future snapshots work
-        delete localOverrides[id];
       }
-    };
 
-    window.undoTicket = async function (id) {
-      // Mirror the same pattern for undo
-      localOverrides[id] = "pending";
-      if (tickets[id]) tickets[id].status = "pending";
-      renderTickets();
+      // 6. Unlock regardless of success/failure
+      inFlight.delete(id);
+    }
 
-      if (fsMod && db) {
-        try {
-          await fsMod.updateDoc(
-            fsMod.doc(db, "restaurants", restaurantId, "kot", id),
-            { status: "pending" }
-          );
-          delete localOverrides[id];
-        } catch (e) {
-          console.error("Undo failed", e);
-          delete localOverrides[id];
-          if (tickets[id]) tickets[id].status = "done";
-          renderTickets();
-        }
-      } else {
-        delete localOverrides[id];
-      }
-    };
+    window.markDone   = function (id) { return setTicketStatus(id, "done");    };
+    window.undoTicket = function (id) { return setTicketStatus(id, "pending"); };
 
     async function startKot() {
       if (!restaurantId) {
@@ -691,40 +686,34 @@
         const q      = fsM.query(kotCol, fsM.orderBy("createdAt", "desc"), fsM.limit(100));
 
         fsM.onSnapshot(q, function (snap) {
-          const isFirst = Object.keys(tickets).length === 0;
           let hasNew = false;
 
           snap.docChanges().forEach(function (change) {
             const id   = change.doc.id;
             const data = change.doc.data();
 
+            // ── CORE FIX ──────────────────────────────────────────────────
+            // If we are currently writing this ticket, SKIP the snapshot
+            // entirely. Our local tickets[id].status is already correct.
+            // The snapshot is either the echo of our own write (harmless
+            // but we don't want it to re-render) or a stale read —
+            // either way we ignore it until inFlight clears.
+            // ──────────────────────────────────────────────────────────────
+            if (inFlight.has(id)) return;
+
             if (change.type === "added") {
-              // ── FIX: If we have a local override for this ID, keep our
-              // local status — don't let the snapshot overwrite it.
-              if (localOverrides.hasOwnProperty(id)) {
-                data.status = localOverrides[id];
-              }
               tickets[id] = data;
-              if (!isFirst && data.status !== "done") hasNew = true;
+              if (!initialLoad && data.status !== "done") hasNew = true;
             }
-
             if (change.type === "modified") {
-              // ── FIX: Only apply the Firestore status if there's no local
-              // override in flight. This is what was broken before — a
-              // "modified" event from our own write was landing AFTER we
-              // cleared pendingUpdates, silently reverting the status.
-              if (localOverrides.hasOwnProperty(id)) {
-                data.status = localOverrides[id];
-              }
               tickets[id] = data;
             }
-
             if (change.type === "removed") {
               delete tickets[id];
-              delete localOverrides[id];
             }
           });
 
+          initialLoad = false;
           if (hasNew) playBeep();
           renderTickets();
           setStatus("Live · " + restaurantId, true);
