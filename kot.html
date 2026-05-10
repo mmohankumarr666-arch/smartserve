@@ -35,7 +35,6 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Header ── */
     .header {
       display: flex;
       align-items: center;
@@ -65,11 +64,7 @@
       white-space: nowrap;
     }
 
-    .page-title {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text);
-    }
+    .page-title { font-size: 1rem; font-weight: 700; color: var(--text); }
 
     .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
@@ -113,10 +108,7 @@
       white-space: nowrap;
     }
 
-    .filter-tab.active {
-      background: var(--surface-2);
-      color: var(--text);
-    }
+    .filter-tab.active { background: var(--surface-2); color: var(--text); }
 
     .badge-count {
       display: inline-flex;
@@ -149,7 +141,6 @@
     .btn-sound:hover { border-color: var(--accent); color: var(--accent); }
     .btn-sound.muted-state { color: var(--red); border-color: var(--red); }
 
-    /* ── Error / no-restaurant screen ── */
     .no-restaurant {
       display: flex;
       flex-direction: column;
@@ -162,20 +153,8 @@
     }
 
     .no-restaurant .icon { font-size: 3rem; opacity: .5; }
-
-    .no-restaurant h2 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .no-restaurant p {
-      font-size: 0.88rem;
-      color: var(--muted);
-      max-width: 380px;
-      line-height: 1.6;
-    }
-
+    .no-restaurant h2 { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+    .no-restaurant p { font-size: 0.88rem; color: var(--muted); max-width: 380px; line-height: 1.6; }
     .no-restaurant code {
       font-family: var(--mono);
       font-size: 0.82rem;
@@ -186,12 +165,8 @@
       color: var(--accent);
     }
 
-    /* ── Main board ── */
-    .board {
-      padding: 20px 20px 40px;
-    }
+    .board { padding: 20px 20px 40px; }
 
-    /* Empty / loading states */
     .empty-state {
       display: flex;
       flex-direction: column;
@@ -206,14 +181,12 @@
     .empty-state p { font-size: 0.9rem; font-weight: 500; }
     .empty-state small { font-size: 0.78rem; opacity: .7; }
 
-    /* ── Ticket grid ── */
     .ticket-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 16px;
     }
 
-    /* ── KOT Ticket card ── */
     .ticket {
       background: var(--surface);
       border: 1.5px solid var(--border);
@@ -221,7 +194,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      transition: border-color .2s, box-shadow .2s;
+      transition: border-color .2s, box-shadow .2s, opacity .3s;
       animation: ticketIn .3s ease;
     }
 
@@ -235,12 +208,14 @@
       box-shadow: 0 0 0 1px var(--amber), 0 0 20px rgba(245,158,11,.15);
     }
 
-    .ticket.done {
-      border-color: var(--border);
-      opacity: .55;
+    .ticket.done { border-color: var(--border); opacity: .55; }
+
+    /* ── transitioning state — shows green briefly before moving to done tab ── */
+    .ticket.completing {
+      border-color: var(--green);
+      box-shadow: 0 0 0 1px var(--green), 0 0 20px rgba(34,197,94,.15);
     }
 
-    /* Ticket header */
     .ticket-head {
       display: flex;
       align-items: center;
@@ -265,11 +240,7 @@
       gap: 4px;
     }
 
-    .ticket-time {
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      color: var(--muted);
-    }
+    .ticket-time { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
 
     .ticket-status-badge {
       display: inline-block;
@@ -282,10 +253,9 @@
       font-family: var(--mono);
     }
 
-    .ticket-status-badge.pending  { background: rgba(245,158,11,.15); color: var(--amber); }
-    .ticket-status-badge.done     { background: rgba(34,197,94,.12);  color: var(--green); }
+    .ticket-status-badge.pending { background: rgba(245,158,11,.15); color: var(--amber); }
+    .ticket-status-badge.done    { background: rgba(34,197,94,.12);  color: var(--green); }
 
-    /* Elapsed timer */
     .elapsed {
       font-family: var(--mono);
       font-size: 0.75rem;
@@ -298,7 +268,6 @@
 
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    /* Ticket items */
     .ticket-items {
       padding: 12px 16px;
       flex: 1;
@@ -314,12 +283,7 @@
       gap: 8px;
     }
 
-    .kot-item-name {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--text);
-      line-height: 1.3;
-    }
+    .kot-item-name { font-size: 0.95rem; font-weight: 600; color: var(--text); line-height: 1.3; }
 
     .kot-item-qty {
       font-family: var(--mono);
@@ -333,7 +297,6 @@
       flex-shrink: 0;
     }
 
-    /* Ticket footer */
     .ticket-foot {
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -343,11 +306,7 @@
       gap: 8px;
     }
 
-    .item-count {
-      font-size: 0.78rem;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
+    .item-count { font-size: 0.78rem; color: var(--muted); font-family: var(--mono); }
 
     .btn-done {
       padding: 8px 20px;
@@ -363,15 +322,8 @@
       letter-spacing: .02em;
     }
 
-    .btn-done:hover {
-      background: rgba(34,197,94,.2);
-      border-color: var(--green);
-    }
-
-    .btn-done:disabled {
-      opacity: .4;
-      cursor: not-allowed;
-    }
+    .btn-done:hover { background: rgba(34,197,94,.2); border-color: var(--green); }
+    .btn-done:disabled { opacity: .4; cursor: not-allowed; }
 
     .btn-undo {
       padding: 8px 14px;
@@ -388,7 +340,6 @@
 
     .btn-undo:hover { color: var(--text); border-color: var(--muted); }
 
-    /* ── Stats bar ── */
     .stats-bar {
       display: flex;
       gap: 12px;
@@ -407,17 +358,11 @@
       font-size: 0.82rem;
     }
 
-    .stat-chip .num {
-      font-family: var(--mono);
-      font-weight: 700;
-      font-size: 1.1rem;
-    }
-
+    .stat-chip .num { font-family: var(--mono); font-weight: 700; font-size: 1.1rem; }
     .stat-chip .lbl { color: var(--muted); font-weight: 500; }
     .stat-chip.pending-stat .num { color: var(--amber); }
     .stat-chip.done-stat    .num { color: var(--green); }
 
-    /* ── Responsive ── */
     @media (max-width: 600px) {
       .header { padding: 12px 14px; }
       .board  { padding: 14px 14px 40px; }
@@ -428,7 +373,6 @@
 </head>
 <body>
 
-  <!-- ── Header ── -->
   <div class="header">
     <div class="header-left">
       <div class="logo">KOT</div>
@@ -446,7 +390,6 @@
     </div>
   </div>
 
-  <!-- ── Board ── -->
   <div class="board" id="board">
     <div class="stats-bar" id="stats-bar" style="display:none">
       <div class="stat-chip pending-stat">
@@ -459,7 +402,6 @@
       </div>
     </div>
 
-    <!-- Shown if page opened without a restaurant ID -->
     <div class="no-restaurant" id="no-restaurant-msg" style="display:none">
       <div class="icon">🍳</div>
       <h2>Open KOT from your dashboard</h2>
@@ -486,12 +428,11 @@
   (function () {
     const FBV = "10.12.5";
 
-    // ── State ──
-    const tickets   = {};
-    let   currentFilter = "pending";
-    let   soundEnabled  = true;
+    const tickets        = {};
+    const pendingUpdates = new Set(); // IDs currently being saved to Firestore
+    let   currentFilter  = "pending";
+    let   soundEnabled   = true;
 
-    // Read restaurant ID from URL — set by the dashboard's KOT link
     const restaurantId = new URLSearchParams(window.location.search).get("restaurant");
 
     // ── Sound ──
@@ -516,9 +457,7 @@
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.35);
-      } catch (e) {
-        // silent fallback
-      }
+      } catch (e) {}
     }
 
     // ── Filter tabs ──
@@ -537,7 +476,7 @@
       document.getElementById("live-dot").style.background = ok ? "var(--green)" : "var(--red)";
     }
 
-    // ── Render helpers ──
+    // ── Elapsed helpers ──
     function elapsedLabel(isoString) {
       const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
       if (diff < 60)   return diff + "s ago";
@@ -643,33 +582,62 @@
       });
     }, 30000);
 
-    // ── Firebase — no login required, uses restaurant ID from URL ──
+    // ── Firebase ──
     let fsMod, db;
 
     window.markDone = async function (id) {
-      const btn = document.querySelector("#tkt-" + id + " .btn-done");
-      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      // 1. Immediately update local state
       if (tickets[id]) tickets[id].status = "done";
+
+      // 2. Lock this ID so the snapshot listener won't overwrite it
+      pendingUpdates.add(id);
+
+      // 3. Animate the card before re-render removes it from pending view
+      const card = document.getElementById("tkt-" + id);
+      if (card) {
+        const btn = card.querySelector(".btn-done");
+        if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+        card.classList.remove("new-order");
+        card.classList.add("completing");
+      }
+
+      // 4. Short delay so the user sees the green flash, then re-render
+      await new Promise(function (r) { setTimeout(r, 400); });
       renderTickets();
+
+      // 5. Persist to Firestore
       if (fsMod && db) {
         try {
           await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "done" });
-        } catch (e) { console.error("Mark done failed", e); }
+        } catch (e) {
+          console.error("Mark done failed", e);
+          // Revert if save failed
+          if (tickets[id]) tickets[id].status = "pending";
+          renderTickets();
+        }
       }
+
+      // 6. Unlock — future snapshots can update this ID again
+      pendingUpdates.delete(id);
     };
 
     window.undoTicket = async function (id) {
       if (tickets[id]) tickets[id].status = "pending";
+      pendingUpdates.add(id);
       renderTickets();
       if (fsMod && db) {
         try {
           await fsMod.updateDoc(fsMod.doc(db, "restaurants", restaurantId, "kot", id), { status: "pending" });
-        } catch (e) { console.error("Undo failed", e); }
+        } catch (e) {
+          console.error("Undo failed", e);
+          if (tickets[id]) tickets[id].status = "done";
+          renderTickets();
+        }
       }
+      pendingUpdates.delete(id);
     };
 
     async function startKot() {
-      // No restaurant ID → show helpful message
       if (!restaurantId) {
         document.getElementById("no-restaurant-msg").style.display = "";
         document.getElementById("empty-state").style.display = "none";
@@ -677,7 +645,6 @@
         return;
       }
 
-      // No Firebase config → nothing to listen to
       if (!window.SMARTSERVE_FIREBASE_CONFIG ||
           !window.SMARTSERVE_FIREBASE_CONFIG.apiKey ||
           window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
@@ -713,7 +680,14 @@
           snap.docChanges().forEach(function (change) {
             const id   = change.doc.id;
             const data = change.doc.data();
-            if (change.type === "added")    { tickets[id] = data; if (!isFirst && data.status !== "done") hasNew = true; }
+
+            // Skip if we have a local update in flight for this ID
+            if (pendingUpdates.has(id)) return;
+
+            if (change.type === "added")    {
+              tickets[id] = data;
+              if (!isFirst && data.status !== "done") hasNew = true;
+            }
             if (change.type === "modified") { tickets[id] = data; }
             if (change.type === "removed")  { delete tickets[id]; }
           });
@@ -733,7 +707,6 @@
       }
     }
 
-    // Boot
     renderTickets();
     startKot();
   })();
