@@ -635,11 +635,15 @@
           }
           document.getElementById("overlay").classList.add("hidden");
 
-          // Resolve restaurant
-          const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
-          if (!idx.exists()) return;
-          const rid = idx.data().restaurantId;
-          document.getElementById("restaurant-label").textContent = rid;
+         // Resolve restaurant — prefer ?restaurant= URL param, fall back to staffIndex
+const urlRid = new URLSearchParams(window.location.search).get("restaurant");
+let rid = urlRid;
+if (!rid) {
+  const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
+  if (!idx.exists()) return;
+  rid = idx.data().restaurantId;
+}
+document.getElementById("restaurant-label").textContent = rid;
 
           // Load state
           const snap = await fsM.getDoc(fsM.doc(db, "restaurants", rid, "smartserve", "state"));
