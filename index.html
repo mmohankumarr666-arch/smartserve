@@ -173,25 +173,6 @@
         .restaurant-details-form .wide-field { grid-column: 1; }
       }
     </style>
-    <style>
-  .staff-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: .75rem 1rem;
-    border: 1.5px solid var(--border); border-radius: 10px;
-    background: var(--surface-2); margin-bottom: .5rem; gap: 12px;
-  }
-  .staff-item-left { display: flex; flex-direction: column; gap: .15rem; }
-  .staff-item-left strong { font-size: .9rem; font-weight: 600; }
-  .staff-item-left small  { font-size: .75rem; color: var(--text-muted); font-family: 'DM Mono', monospace; }
-  .role-badge {
-    display: inline-block; padding: 2px 9px; border-radius: 999px;
-    font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-  }
-  .role-badge.owner   { background: #1a1a1a; color: #fff; }
-  .role-badge.manager { background: var(--amber-bg); color: var(--amber); }
-  .role-badge.staff   { background: var(--surface-hover); color: var(--text-muted); }
-  .role-badge.pending { background: var(--green-bg); color: var(--green); }
-</style>
   </head>
   <body>
 
@@ -201,7 +182,7 @@
     <section id="login-screen" class="login-screen">
       <div class="login-card">
         <div>
-          <p class="eyebrow">Staff &amp; admin portal</p>
+          <p class="eyebrow">Owner &amp; admin portal</p>
           <h1>SmartServe</h1>
         </div>
 
@@ -217,7 +198,7 @@
           <label>Email<input id="staff-email" type="email" autocomplete="email" required /></label>
           <label>Password<input id="staff-password" type="password" autocomplete="current-password" required /></label>
           <button class="primary-action" type="submit">Sign In</button>
-          <p id="login-message" class="login-message">Use your staff account to sign in.</p>
+          <p id="login-message" class="login-message">Use your owner account to sign in.</p>
         </form>
 
         <!-- Register form -->
@@ -232,9 +213,6 @@
               <option value="yearly">Yearly — ₹9,999 / year (save 20%)</option>
             </select>
           </label>
-          <label>Joining existing restaurant? Enter Restaurant ID
-  <input id="reg-join-id" type="text" placeholder="e.g. smart-cafe (leave blank if new)" />
-</label>
           <button class="primary-action" type="submit">Create Account</button>
           <p id="register-message" class="login-message">You will be the owner of this restaurant.</p>
         </form>
@@ -407,45 +385,6 @@
           </div>
         </form>
       </section>
-<section class="menu-manager" aria-labelledby="staff-title">
-  <div class="section-title">
-    <h2 id="staff-title">Staff accounts</h2>
-    <span>Manage who can access this dashboard</span>
-  </div>
- 
-  <!-- Add staff form -->
-  <form id="staff-invite-form" class="menu-form">
-    <label>Staff Name
-      <input id="staff-name-input" type="text" placeholder="e.g. Priya Rajan" required />
-    </label>
-    <label>Email
-      <input id="staff-email-input" type="email" placeholder="e.g. priya@cafe.com" required />
-    </label>
-    <label>Role
-      <select id="staff-role-input">
-        <option value="staff">Staff</option>
-        <option value="manager">Manager</option>
-      </select>
-    </label>
-    <div class="form-actions wide-field">
-      <button id="staff-invite-btn" class="primary-action" type="submit">Add Staff</button>
-      <p id="staff-invite-msg" style="font-size:.82rem;color:var(--text-muted);align-self:center"></p>
-    </div>
-  </form>
- 
-  <!-- Invite instructions -->
-  <div style="background:var(--surface-2);border:1.5px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:1rem;font-size:.82rem;line-height:1.6;color:var(--text-muted)">
-    <strong style="color:var(--text)">How it works:</strong>
-    After you add a staff member above, share your <strong>Restaurant ID</strong> with them.
-    They visit the dashboard, click <strong>Register</strong>, fill in their name/email/password,
-    and enter your Restaurant ID in the "Joining existing restaurant" field. They'll be linked to your account instantly.
-  </div>
- 
-  <!-- Staff list -->
-  <div id="staff-list"></div>
-</section>
- 
-<!-- Staff section styles (add inside your existing <style> or <head>) -->
 
       <section class="history-board" aria-labelledby="history-title">
         <div class="section-title">
