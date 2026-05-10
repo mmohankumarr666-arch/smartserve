@@ -85,6 +85,21 @@
     .header-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
     .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+    /* Live indicator */
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .72rem; font-weight: 600; color: var(--muted);
+      background: var(--surface-2); border: 1.5px solid var(--border);
+      padding: 4px 10px; border-radius: 999px;
+    }
+    .live-pill .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    .live-pill.offline .dot { background: var(--muted); animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
     .date-input {
       padding: 7px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
       background: var(--surface-2); font-size: .85rem; font-family: var(--mono);
@@ -278,7 +293,7 @@
         <div class="field">Email<input id="sr-email" type="email" autocomplete="email" required /></div>
         <div class="field" style="margin-top:8px">Password<input id="sr-password" type="password" autocomplete="current-password" required /></div>
         <button class="btn-primary" type="submit" id="sr-signin-btn" style="margin-top:4px">Sign In</button>
-        <p class="login-msg" id="login-msg">Use your staff credentials.</p>
+        <p class="login-msg" id="login-msg">Use your owner credentials.</p>
       </form>
     </div>
   </div>
@@ -291,6 +306,11 @@
       <span id="restaurant-label" style="font-size:.78rem;color:var(--muted);font-family:var(--mono)"></span>
     </div>
     <div class="header-right">
+      <!-- Live sync indicator -->
+      <div class="live-pill" id="live-pill">
+        <span class="dot"></span>
+        <span id="live-text">Connecting…</span>
+      </div>
       <input type="date" class="date-input" id="date-picker" />
       <button class="btn-secondary" id="btn-today">Today</button>
       <button class="btn-print" onclick="window.print()">🖨 Print</button>
@@ -406,7 +426,7 @@
   <script>
   (function () {
     const FBV = "10.12.5";
-    let invoices = [];
+    let invoices   = [];
     let netRevenue = 0;
 
     // ── Helpers ──
@@ -422,6 +442,18 @@
       return d.toLocaleDateString("en-IN", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
     }
 
+    function setLive(ok) {
+      const pill = document.getElementById("live-pill");
+      const text = document.getElementById("live-text");
+      if (ok) {
+        pill.classList.remove("offline");
+        text.textContent = "Live";
+      } else {
+        pill.classList.add("offline");
+        text.textContent = "Offline";
+      }
+    }
+
     // ── Date picker ──
     const picker = document.getElementById("date-picker");
     picker.value = todayStr();
@@ -431,8 +463,8 @@
     });
 
     // ── Slider + expenses ──
-    const slider       = document.getElementById("food-cost-slider");
-    const sliderVal    = document.getElementById("food-cost-val");
+    const slider        = document.getElementById("food-cost-slider");
+    const sliderVal     = document.getElementById("food-cost-val");
     const otherExpenses = document.getElementById("other-expenses");
 
     slider.addEventListener("input", function () {
@@ -442,15 +474,15 @@
     otherExpenses.addEventListener("input", updateEstimator);
 
     function updateEstimator() {
-      const foodPct = Number(slider.value) / 100;
-      const other   = Math.max(0, Number(otherExpenses.value) || 0);
+      const foodPct  = Number(slider.value) / 100;
+      const other    = Math.max(0, Number(otherExpenses.value) || 0);
       const subtotal = invoices
         .filter(inv => toDateStr(inv.closedAt) === picker.value)
         .reduce((s, inv) => s + (inv.subtotal || 0), 0);
 
-      const foodCost  = subtotal * foodPct;
-      const profit    = netRevenue - foodCost - other;
-      const margin    = netRevenue > 0 ? (profit / netRevenue * 100) : 0;
+      const foodCost = subtotal * foodPct;
+      const profit   = netRevenue - foodCost - other;
+      const margin   = netRevenue > 0 ? (profit / netRevenue * 100) : 0;
 
       document.getElementById("est-revenue").textContent   = money(netRevenue);
       document.getElementById("est-food-cost").textContent = "−" + money(foodCost);
@@ -458,7 +490,7 @@
       document.getElementById("est-profit").textContent    = money(Math.abs(profit));
       document.getElementById("est-margin").textContent    = margin.toFixed(1) + "%";
 
-      const profitRow = document.getElementById("profit-row");
+      const profitRow   = document.getElementById("profit-row");
       const profitLabel = document.getElementById("profit-label");
       const profitAmt   = document.getElementById("est-profit");
 
@@ -482,21 +514,19 @@
 
       const day = invoices.filter(inv => toDateStr(inv.closedAt) === dateStr);
 
-      // Stats
-      const totalRevenue = day.reduce((s, inv) => s + (inv.total    || 0), 0);
+      const totalRevenue  = day.reduce((s, inv) => s + (inv.total    || 0), 0);
       const totalSubtotal = day.reduce((s, inv) => s + (inv.subtotal || 0), 0);
       const totalService  = day.reduce((s, inv) => s + (inv.service  || 0), 0);
       const totalTax      = day.reduce((s, inv) => s + (inv.tax      || 0), 0);
       const totalItems    = day.reduce((s, inv) => s + (inv.itemCount || 0), 0);
       const grossRevenue  = totalSubtotal + totalService;
-      netRevenue          = grossRevenue; // GST not ours
+      netRevenue          = grossRevenue;
 
       document.getElementById("stat-revenue").textContent = money(totalRevenue);
       document.getElementById("stat-orders").textContent  = day.length;
       document.getElementById("stat-items").textContent   = totalItems;
       document.getElementById("stat-avg").textContent     = day.length ? money(totalRevenue / day.length) : "₹0";
 
-      // P&L
       document.getElementById("pnl-subtotal").textContent = money(totalSubtotal);
       document.getElementById("pnl-service").textContent  = money(totalService);
       document.getElementById("pnl-gross").textContent    = money(grossRevenue);
@@ -515,11 +545,9 @@
         const h = new Date(inv.closedAt).getHours();
         hourly[h] += (inv.total || 0);
       });
-
       const max    = Math.max(...hourly, 1);
       const active = hourly.map((v, i) => i >= 6 && i <= 23 ? { h: i, v } : null).filter(Boolean);
       const chart  = document.getElementById("bar-chart");
-
       chart.innerHTML = active.map(function ({ h, v }) {
         const pct   = Math.round((v / max) * 92);
         const label = h === 0 ? "12a" : h < 12 ? h+"a" : h === 12 ? "12p" : (h-12)+"p";
@@ -539,15 +567,12 @@
           totals[l.name].revenue += (l.qty || 0) * (l.price || 0);
         });
       });
-
       const sorted = Object.entries(totals).sort((a, b) => b[1].qty - a[1].qty).slice(0, 6);
       const el     = document.getElementById("top-items-list");
-
       if (!sorted.length) {
         el.innerHTML = '<p style="font-size:.83rem;color:var(--muted)">No items sold on this date.</p>';
         return;
       }
-
       const maxQty = sorted[0][1].qty;
       el.innerHTML = sorted.map(function ([name, data]) {
         const pct = Math.round((data.qty / maxQty) * 100);
@@ -567,21 +592,17 @@
       const el  = document.getElementById("inv-list");
       const lbl = document.getElementById("inv-count-label");
       lbl.textContent = day.length + " bill" + (day.length === 1 ? "" : "s");
-
       if (!day.length) {
         el.innerHTML = '<div class="empty-state"><div class="icon">🧾</div><p>No invoices for this date.</p></div>';
         return;
       }
-
       const sorted = day.slice().sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
-
       el.innerHTML = sorted.map(function (inv) {
-        const time    = new Date(inv.closedAt).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
+        const time     = new Date(inv.closedAt).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
         const hasLines = Array.isArray(inv.lines) && inv.lines.length;
         const lineRows = hasLines ? inv.lines.map(l =>
           '<div class="inv-line"><span>' + escH(l.name) + ' ×' + l.qty + '</span><span style="font-family:var(--mono)">' + money(l.price * l.qty) + '</span></div>'
         ).join("") : "";
-
         return '<div class="inv-item" onclick="this.classList.toggle(\'expanded\')">' +
           '<div class="inv-summary">' +
             '<div class="inv-summary-left">' +
@@ -611,6 +632,7 @@
           window.SMARTSERVE_FIREBASE_CONFIG.apiKey.includes("PASTE_")) {
         document.getElementById("overlay").classList.add("hidden");
         document.getElementById("date-label").textContent = "Local mode — no Firebase configured";
+        setLive(false);
         return;
       }
 
@@ -631,32 +653,40 @@
         authM.onAuthStateChanged(auth, async function (user) {
           if (!user) {
             document.getElementById("overlay").classList.remove("hidden");
+            setLive(false);
             return;
           }
           document.getElementById("overlay").classList.add("hidden");
 
-         // Resolve restaurant — prefer ?restaurant= URL param, fall back to staffIndex
-const urlRid = new URLSearchParams(window.location.search).get("restaurant");
-let rid = urlRid;
-if (!rid) {
-  const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
-  if (!idx.exists()) return;
-  rid = idx.data().restaurantId;
-}
-document.getElementById("restaurant-label").textContent = rid;
+          // Resolve restaurant ID
+          const urlRid = new URLSearchParams(window.location.search).get("restaurant");
+          let rid = urlRid;
+          if (!rid) {
+            const idx = await fsM.getDoc(fsM.doc(db, "staffIndex", user.uid));
+            if (!idx.exists()) { setLive(false); return; }
+            rid = idx.data().restaurantId;
+          }
+          document.getElementById("restaurant-label").textContent = rid;
 
-          // Load state
-          const snap = await fsM.getDoc(fsM.doc(db, "restaurants", rid, "smartserve", "state"));
-          if (snap.exists()) {
+          // ── REAL-TIME LISTENER instead of one-time getDoc ──
+          // Every time "Close Table" is clicked on the dashboard,
+          // Firebase updates the state doc → this fires → report re-renders instantly.
+          const stateDoc = fsM.doc(db, "restaurants", rid, "smartserve", "state");
+          fsM.onSnapshot(stateDoc, function (snap) {
+            if (!snap.exists()) { setLive(true); render(); return; }
             const data = snap.data();
             invoices = (data.invoices || []).map(function (inv) {
               return Object.assign({}, inv, {
-                closedAt: inv.closedAt instanceof Date ? inv.closedAt :
-                  (typeof inv.closedAt?.toDate === "function" ? inv.closedAt.toDate() : new Date(inv.closedAt))
+                closedAt: inv.closedAt instanceof Date ? inv.closedAt
+                  : (typeof inv.closedAt?.toDate === "function" ? inv.closedAt.toDate() : new Date(inv.closedAt))
               });
             });
-          }
-          render();
+            setLive(true);
+            render();
+          }, function (e) {
+            console.error("Report snapshot failed", e);
+            setLive(false);
+          });
         });
 
         document.getElementById("login-form").addEventListener("submit", async function (e) {
@@ -670,10 +700,14 @@ document.getElementById("restaurant-label").textContent = rid;
           try {
             await authM.signInWithEmailAndPassword(auth, email, pass);
           } catch (err) {
-            const msgs = { "auth/invalid-credential": "Invalid email or password.", "auth/user-not-found": "No account found.", "auth/wrong-password": "Wrong password." };
+            const msgs = {
+              "auth/invalid-credential": "Invalid email or password.",
+              "auth/user-not-found":     "No account found.",
+              "auth/wrong-password":     "Wrong password.",
+            };
             msg.textContent = msgs[err.code] || err.message;
             msg.className   = "login-msg error";
-            btn.disabled = false;
+            btn.disabled    = false;
           }
         });
 
@@ -681,6 +715,7 @@ document.getElementById("restaurant-label").textContent = rid;
         console.error("Report boot failed", e);
         document.getElementById("login-msg").textContent = "Firebase connection failed.";
         document.getElementById("login-msg").className   = "login-msg error";
+        setLive(false);
       }
     }
 
