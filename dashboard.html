@@ -390,6 +390,16 @@
             FSSAI Number (optional)
             <input id="detail-fssai" type="text" placeholder="e.g. 10013021005246" maxlength="14" />
           </label>
+          
+          <!-- ADD THIS BELOW FSSAI -->
+          <label class="wide-field">
+            UPI QR Code Image (optional — shown on printed bill)
+            <input id="detail-upi-qr" type="file" accept="image/*" style="padding:6px 0;" />
+            <img id="detail-upi-preview" src="" alt="UPI QR Preview"
+                 style="display:none;margin-top:8px;width:160px;height:160px;object-fit:contain;border-radius:8px;border:1.5px solid #e4e2da;" />
+            <button type="button" id="detail-upi-clear" style="display:none;margin-top:6px;padding:4px 12px;font-size:0.78rem;border:1.5px solid #e4e2da;border-radius:6px;background:transparent;cursor:pointer;font-family:inherit;">Remove QR</button>
+          </label>
+          
           <div class="form-actions wide-field" style="grid-column:1/-1">
             <button id="save-details-btn" class="primary-action" type="submit">Save Details</button>
             <p id="details-save-msg" class="details-save-msg"></p>
