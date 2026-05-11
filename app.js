@@ -459,6 +459,10 @@ function resetMenuForm() {
   document.querySelector("#menu-desc").value                = "";
   document.querySelector("#menu-available").checked         = true;
   document.querySelector("#save-menu-item-btn").textContent = "Add Item";
+  document.querySelector("#menu-image-preview").src      = "";
+  document.querySelector("#menu-image-preview").style.display = "none";
+  document.querySelector("#menu-image-input").value      = "";
+  window._pendingMenuImage = null;
 }
 function editMenuItem(id) {
   var item = getItem(id); if (!item) return;
@@ -471,6 +475,15 @@ function editMenuItem(id) {
   document.querySelector("#menu-available").checked         = item.available;
   document.querySelector("#save-menu-item-btn").textContent = "Save Changes";
   document.querySelector("#menu-name").focus();
+  if (item.image) {
+  document.querySelector("#menu-image-preview").src           = item.image;
+  document.querySelector("#menu-image-preview").style.display = "block";
+  window._pendingMenuImage = item.image;
+} else {
+  document.querySelector("#menu-image-preview").src           = "";
+  document.querySelector("#menu-image-preview").style.display = "none";
+  window._pendingMenuImage = null;
+}
 }
 function saveMenuItem(event) {
   event.preventDefault();
