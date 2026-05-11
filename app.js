@@ -16,22 +16,19 @@ const menu = [
 ];
 
 // ─── Per-table server assignment ──────────────────────────────────────────────
-// tableServers[tableId] = "ServerName"  — set by owner via the table card input.
-// Persisted inside the Firebase state doc so it survives page reloads.
 const tableServers = {};
 
 function getServerForTable(tableId) {
   return tableServers[tableId] || "";
 }
 
-// Called from the inline input on each table card (oninput / onchange)
 window.assignServer = function(tableId, name) {
   if (name && name.trim()) {
     tableServers[tableId] = name.trim();
   } else {
     delete tableServers[tableId];
   }
-  scheduleSave(); // persist without re-rendering (avoids input losing focus)
+  scheduleSave();
 };
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -144,7 +141,7 @@ function serializeState() {
     tableIds: state.tableIds,
     dashboardTable: state.dashboardTable,
     carts: state.carts,
-    tableServers: Object.assign({}, tableServers),   // ← persist server assignments
+    tableServers: Object.assign({}, tableServers),
     sessions: Object.fromEntries(Object.entries(state.sessions).map(function(entry) {
       var id = entry[0], s = entry[1];
       return [id, Object.assign({}, s, {
@@ -166,7 +163,6 @@ function applyRemoteState(data) {
   state.dashboardTable = data.dashboardTable || state.tableIds[0] || "T1";
   state.carts          = data.carts || {};
 
-  // Restore per-table server assignments
   Object.keys(tableServers).forEach(function(k) { delete tableServers[k]; });
   Object.assign(tableServers, data.tableServers || {});
 
@@ -222,10 +218,6 @@ function updateRegisterMessage(text, isError) {
 }
 
 // ─── Food Ready POPUP ─────────────────────────────────────────────────────────
-// Full-screen modal popup when kitchen marks a KOT ticket done.
-// Staff MUST tap "Got it" — they cannot miss it.
-// Multiple alerts queue up and show one after the other.
-
 function playReadyBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -297,7 +289,6 @@ function openFoodReadyModal(tableId, items) {
 
   document.body.appendChild(overlay);
 
-  // Animate in
   requestAnimationFrame(function() {
     requestAnimationFrame(function() { overlay.classList.add("fr-visible"); });
   });
@@ -319,7 +310,6 @@ function startKotDoneListener(fsMod, db) {
   var   firstBatch   = true;
 
   sync.kotUnsubscribe = fsMod.onSnapshot(kotCol, function(snap) {
-    // Skip the initial load — these are historical, already-done tickets
     if (firstBatch) { firstBatch = false; return; }
 
     snap.docChanges().forEach(function(change) {
@@ -329,7 +319,7 @@ function startKotDoneListener(fsMod, db) {
         notifiedDone.add(id);
         showFoodReadyPopup(data.tableId, data.items || []);
       }
-      if (data.status === "pending") notifiedDone.delete(id); // allow re-notify if undone+redone
+      if (data.status === "pending") notifiedDone.delete(id);
     });
   }, function(e) { console.error("KOT done listener error", e); });
 }
@@ -361,14 +351,12 @@ function renderDashboard() {
         + (session.billRequested ? "requested" : "") + " "
         + (session.status === "idle" ? "closed" : "") + '">'
 
-      // ── Main table button ──
       + '<button class="table-select" data-view-table="' + tableId + '">'
           + '<span><strong>' + tableLabel(tableId) + '</strong>'
           + '<small>' + lines.reduce(function(s,l){return s+l.qty;},0) + ' items \u00B7 ' + money(amount) + '</small></span>'
           + '<span class="status-badge ' + badgeClass + '">' + statusText + '</span>'
       + '</button>'
 
-      // ── Server assignment input ──
       + '<div class="server-assign-row">'
           + '<span class="server-assign-icon">&#128100;</span>'
           + '<input'
@@ -459,11 +447,13 @@ function resetMenuForm() {
   document.querySelector("#menu-desc").value                = "";
   document.querySelector("#menu-available").checked         = true;
   document.querySelector("#save-menu-item-btn").textContent = "Add Item";
-  document.querySelector("#menu-image-preview").src      = "";
+  // ── CHANGE 1: reset image fields ──
+  document.querySelector("#menu-image-preview").src         = "";
   document.querySelector("#menu-image-preview").style.display = "none";
-  document.querySelector("#menu-image-input").value      = "";
+  document.querySelector("#menu-image-input").value         = "";
   window._pendingMenuImage = null;
 }
+
 function editMenuItem(id) {
   var item = getItem(id); if (!item) return;
   state.editingMenuId = id;
@@ -475,26 +465,35 @@ function editMenuItem(id) {
   document.querySelector("#menu-available").checked         = item.available;
   document.querySelector("#save-menu-item-btn").textContent = "Save Changes";
   document.querySelector("#menu-name").focus();
+  // ── CHANGE 2: populate image preview when editing ──
   if (item.image) {
-  document.querySelector("#menu-image-preview").src           = item.image;
-  document.querySelector("#menu-image-preview").style.display = "block";
-  window._pendingMenuImage = item.image;
-} else {
-  document.querySelector("#menu-image-preview").src           = "";
-  document.querySelector("#menu-image-preview").style.display = "none";
-  window._pendingMenuImage = null;
+    document.querySelector("#menu-image-preview").src           = item.image;
+    document.querySelector("#menu-image-preview").style.display = "block";
+    window._pendingMenuImage = item.image;
+  } else {
+    document.querySelector("#menu-image-preview").src           = "";
+    document.querySelector("#menu-image-preview").style.display = "none";
+    window._pendingMenuImage = null;
+  }
 }
-}
+
 function saveMenuItem(event) {
   event.preventDefault();
   var name = document.querySelector("#menu-name").value.trim(), price = Number(document.querySelector("#menu-price").value),
       category = document.querySelector("#menu-category").value, desc = document.querySelector("#menu-desc").value.trim(),
       available = document.querySelector("#menu-available").checked;
   if (!name || !desc || !Number.isFinite(price) || price <= 0) return;
-  if (state.editingMenuId) { var item = getItem(state.editingMenuId); if (item) Object.assign(item, { name, price: Math.round(price), category, desc, available }); }
-  else menu.push({ id: uniqueMenuId(name), name, price: Math.round(price), category, desc, available });
+  // ── CHANGE 3: include imageData when saving ──
+  const imageData = window._pendingMenuImage || null;
+  if (state.editingMenuId) {
+    const item = getItem(state.editingMenuId);
+    if (item) Object.assign(item, { name, price: Math.round(price), category, desc, available, image: imageData });
+  } else {
+    menu.push({ id: uniqueMenuId(name), name, price: Math.round(price), category, desc, available, image: imageData });
+  }
   resetMenuForm(); renderAndSave();
 }
+
 function toggleMenuItem(id) {
   var item = getItem(id); if (!item) return;
   item.available = !item.available;
@@ -646,7 +645,6 @@ async function loadDashboardState(fsMod, db) {
     }
   }, function(e){ console.error("Orders listener failed",e); });
 
-  // Watch KOT for "done" status → trigger food-ready popup on dashboard
   startKotDoneListener(fsMod, db);
 }
 
@@ -690,6 +688,26 @@ document.addEventListener("DOMContentLoaded", function() {
   document.querySelector("#add-table-btn").addEventListener("click",addTable);
   document.querySelector("#close-table-btn").addEventListener("click",closeTable);
   document.querySelector("#restaurant-details-form").addEventListener("submit",saveRestaurantDetails);
+
+  // ── CHANGE 4: image file input handler ──
+  document.querySelector("#menu-image-input").addEventListener("change", function () {
+    const file = this.files[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      alert("Image too large. Please use an image under 500 KB.");
+      this.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      window._pendingMenuImage = e.target.result;
+      const preview = document.querySelector("#menu-image-preview");
+      preview.src           = e.target.result;
+      preview.style.display = "block";
+    };
+    reader.readAsDataURL(file);
+  });
+
   document.addEventListener("click",function(event){
     var target=event.target.closest("button"); if(!target) return;
     if(target.dataset.viewTable){state.dashboardTable=target.dataset.viewTable;renderAndSave();}
