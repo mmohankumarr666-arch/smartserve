@@ -98,7 +98,7 @@ const state = {
   invoices: [],
 };
 
-const restaurantDetails = { name:"", address:"", phone:"", gstin:"", email:"", fssai:"" };
+const restaurantDetails = { name:"", address:"", phone:"", gstin:"", email:"", fssai:"", upiQr:"" };
 
 const sync = {
   enabled: false, loaded: false, applyingRemote: false,
@@ -433,6 +433,11 @@ function renderDetailsForm() {
   document.querySelector("#detail-gstin").value   = restaurantDetails.gstin   || "";
   document.querySelector("#detail-email").value   = restaurantDetails.email   || "";
   document.querySelector("#detail-fssai").value   = restaurantDetails.fssai   || "";
+  if (restaurantDetails.upiQr) {
+    document.querySelector("#detail-upi-preview").src          = restaurantDetails.upiQr;
+    document.querySelector("#detail-upi-preview").style.display = "block";
+    document.querySelector("#detail-upi-clear").style.display   = "inline-block";
+  }
 }
 
 function renderAll() { renderDashboard(); renderBill(); renderMenuEditor(); renderHistory(); }
@@ -554,14 +559,21 @@ function printBill() {
   if (restaurantDetails.email)   headerLines += "<div class='sub'>"+escapeHtml(restaurantDetails.email)+"</div>";
   if (restaurantDetails.gstin)   headerLines += "<div class='sub'>GSTIN: "+escapeHtml(restaurantDetails.gstin.toUpperCase())+"</div>";
   if (restaurantDetails.fssai)   headerLines += "<div class='sub'>FSSAI: "+escapeHtml(restaurantDetails.fssai)+"</div>";
-  var html = "<!doctype html><html><head><meta charset='utf-8'><title>Bill - "+invoiceNum+"</title><style>"+css+"</style></head><body><h2>"+escapeHtml(billName)+"</h2>"+headerLines+"<div class='inv-no'>"+invoiceNum+" &nbsp;|&nbsp; "+tableLabel(state.dashboardTable)+" &nbsp;|&nbsp; "+now+"</div><table><thead><tr><th>Item</th><th style='text-align:center'>Qty</th><th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th></tr></thead><tbody>"+rows+"</tbody></table><div class='sep'></div><div class='row'><span>Subtotal</span><span>"+money(total.subtotal)+"</span></div><div class='row'><span>Service charge (4%)</span><span>"+money(total.service)+"</span></div><div class='row'><span>GST (5%)</span><span>"+money(total.tax)+"</span></div><div class='row grand'><span>Total</span><span>"+money(total.grand)+"</span></div><div class='footer'><p>Thank you for dining with us!</p><p>Powered by SmartServe</p></div><scr"+"ipt>window.onload=function(){window.print();}</scr"+"ipt></body></html>";
+  var upiBlock = "";
+  if (restaurantDetails.upiQr) {
+    upiBlock = "<div style='text-align:center;margin-top:16px;border-top:1px dashed #ccc;padding-top:12px'>"
+      + "<p style='font-size:11px;font-weight:700;margin-bottom:6px'>Scan to Pay (UPI)</p>"
+      + "<img src='" + restaurantDetails.upiQr + "' style='width:140px;height:140px;object-fit:contain;' />"
+      + "</div>";
+  }
+  var html = "<!doctype html><html><head><meta charset='utf-8'><title>Bill - "+invoiceNum+"</title><style>"+css+"</style></head><body><h2>"+escapeHtml(billName)+"</h2>"+headerLines+"<div class='inv-no'>"+invoiceNum+" &nbsp;|&nbsp; "+tableLabel(state.dashboardTable)+" &nbsp;|&nbsp; "+now+"</div><table><thead><tr><th>Item</th><th style='text-align:center'>Qty</th><th style='text-align:right'>Rate</th><th style='text-align:right'>Amt</th></tr></thead><tbody>"+rows+"</tbody></table><div class='sep'></div><div class='row'><span>Subtotal</span><span>"+money(total.subtotal)+"</span></div><div class='row'><span>Service charge (4%)</span><span>"+money(total.service)+"</span></div><div class='row'><span>GST (5%)</span><span>"+money(total.tax)+"</span></div><div class='row grand'><span>Total</span><span>"+money(total.grand)+"</span></div><div class='footer'><p>Thank you for dining with us!</p><p>Powered by SmartServe</p></div>"+ upiBlock +"<scr"+"ipt>window.onload=function(){window.print();}</scr"+"ipt></body></html>";
   var win = window.open("","_blank","width=420,height=680"); win.document.write(html); win.document.close();
 }
 
 // ─── Restaurant details ────────────────────────────────────────────────────────
 async function saveRestaurantDetails(event) {
   event.preventDefault();
-  restaurantDetails.name = document.querySelector("#detail-name").value.trim(); restaurantDetails.address = document.querySelector("#detail-address").value.trim(); restaurantDetails.phone = document.querySelector("#detail-phone").value.trim(); restaurantDetails.gstin = document.querySelector("#detail-gstin").value.trim().toUpperCase(); restaurantDetails.email = document.querySelector("#detail-email").value.trim(); restaurantDetails.fssai = document.querySelector("#detail-fssai").value.trim();
+  restaurantDetails.name = document.querySelector("#detail-name").value.trim(); restaurantDetails.address = document.querySelector("#detail-address").value.trim(); restaurantDetails.phone = document.querySelector("#detail-phone").value.trim(); restaurantDetails.gstin = document.querySelector("#detail-gstin").value.trim().toUpperCase(); restaurantDetails.email = document.querySelector("#detail-email").value.trim(); restaurantDetails.fssai = document.querySelector("#detail-fssai").value.trim(); if (window._pendingUpiQr !== undefined) restaurantDetails.upiQr = window._pendingUpiQr || "";
   var msg = document.querySelector("#details-save-msg");
   if (sync.enabled && sync.detailsDoc && sync.setDoc) {
     try { await sync.setDoc(sync.detailsDoc, Object.assign({}, restaurantDetails, { updatedAt: new Date().toISOString() }), { merge: true }); msg.textContent = "Saved to Firebase \u2713"; }
@@ -573,7 +585,7 @@ async function loadRestaurantDetails(fsMod, db) {
   if (!sync.detailsDoc) return;
   try {
     var snap = await fsMod.getDoc(sync.detailsDoc);
-    if (snap.exists()) { var data = snap.data(); Object.assign(restaurantDetails, { name:data.name||"", address:data.address||"", phone:data.phone||"", gstin:data.gstin||"", email:data.email||"", fssai:data.fssai||"" }); renderDetailsForm(); }
+    if (snap.exists()) { var data = snap.data(); Object.assign(restaurantDetails, { name:data.name||"", address:data.address||"", phone:data.phone||"", gstin:data.gstin||"", email:data.email||"", fssai:data.fssai||"", upiQr:data.upiQr||"" }); renderDetailsForm(); }
   } catch (e) { console.error("Details load failed", e); }
 }
 
@@ -688,6 +700,32 @@ document.addEventListener("DOMContentLoaded", function() {
   document.querySelector("#add-table-btn").addEventListener("click",addTable);
   document.querySelector("#close-table-btn").addEventListener("click",closeTable);
   document.querySelector("#restaurant-details-form").addEventListener("submit",saveRestaurantDetails);
+  document.querySelector("#detail-upi-qr").addEventListener("change", function () {
+    const file = this.files[0];
+    if (!file) return;
+    if (file.size > 300 * 1024) {
+      alert("QR image too large. Please use an image under 300 KB.");
+      this.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      window._pendingUpiQr = e.target.result;
+      const preview = document.querySelector("#detail-upi-preview");
+      preview.src            = e.target.result;
+      preview.style.display  = "block";
+      document.querySelector("#detail-upi-clear").style.display = "inline-block";
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.querySelector("#detail-upi-clear").addEventListener("click", function () {
+    window._pendingUpiQr = "";
+    document.querySelector("#detail-upi-qr").value = "";
+    document.querySelector("#detail-upi-preview").src = "";
+    document.querySelector("#detail-upi-preview").style.display = "none";
+    this.style.display = "none";
+  });
 
   // ── CHANGE 4: image file input handler ──
   document.querySelector("#menu-image-input").addEventListener("change", function () {
