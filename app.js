@@ -569,7 +569,7 @@ async function loadRestaurantDetails(fsMod, db) {
 async function connectFirebase() {
   if (!firebaseConfigIsReady()) {
     document.body.classList.remove("auth-locked"); document.body.classList.add("auth-ready");
-    updateSyncStatus("Local prototype"); sync.loaded = true; renderAll(); return;
+    updateSyncStatus("Smart Serve"); sync.loaded = true; renderAll(); return;
   }
   updateLoginMessage("Connecting to Firebase...");
   try {
