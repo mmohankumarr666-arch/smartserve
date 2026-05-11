@@ -338,6 +338,13 @@
           </label>
           <label class="wide-field">Description<input id="menu-desc" type="text" placeholder="Short menu description" required /></label>
           <label class="toggle-field"><input id="menu-available" type="checkbox" checked /> Available to order</label>
+          <!-- ── CHANGE: Menu image upload field ── -->
+          <label class="wide-field">
+            Menu Image (optional)
+            <input id="menu-image-input" type="file" accept="image/*" style="padding:6px 0;" />
+            <img id="menu-image-preview" src="" alt="Preview"
+                 style="display:none;margin-top:8px;width:100%;max-height:160px;object-fit:cover;border-radius:8px;border:1.5px solid #e4e2da;" />
+          </label>
           <div class="form-actions">
             <button id="save-menu-item-btn" class="primary-action" type="submit">Add Item</button>
             <button id="cancel-menu-edit-btn" class="secondary-action" type="button">Clear</button>
