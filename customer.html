@@ -300,5 +300,46 @@
 
     <script src="firebase-config.js"></script>
     <script src="customer.js"></script>
+    <!-- Powered by SmartServe -->
+<div style="
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9998;
+  background: rgba(13,12,10,0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid #2e2b24;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: #8a8375;
+">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="#e8a230" aria-hidden="true">
+    <path d="M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"/>
+  </svg>
+  <span>Powered by</span>
+  
+    href="https://smartserve.in"
+    target="_blank"
+    rel="noopener noreferrer"
+    style="
+      color: #e8a230;
+      text-decoration: none;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      transition: color 0.2s;
+    "
+    onmouseenter="this.style.color='#f5c05a'"
+    onmouseleave="this.style.color='#e8a230'"
+  >SmartServe</a>
+</div>
+
+<!-- Push page content above the fixed bar -->
+<style>
+  body { padding-bottom: 44px !important; }
+</style>
   </body>
 </html>
